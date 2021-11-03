@@ -1,0 +1,33 @@
+HubAsset:
+  Type: "EdgeConnectorForKVSHubAsset"
+  # Name for hub SiteWise asset
+  Name: "CookieFactoryHubAsset"
+  # Value for Asset Property "HubName". E.g, "CookieFactoryHub"
+  HubName: "CookieFactoryHub"
+  # Hub managed camera sitewise Asset name.
+  ChildrenCameraSiteWiseAssetName: ["CookieFactoryCameraAsset1"]
+
+CameraAsset:
+  Type: "EdgeConnectorForKVSCameraAsset"
+  # Name for Camera SiteWise asset
+  Name: "CookieFactoryCameraAsset1"
+  # Local video capture start time. Video will start capture and record to hub device from this time.
+  # This time is cron time. "* * * * *" stands for keep capturing, "-" stands for never start.
+  CaptureStartTime: "* * * * *"
+  # Local video capture duration time. If CaptureStartTime been set to keep capturing or never start, this value
+  # does not take efforts.
+  CaptureDurationInMinutes: 10
+  # Local data retention period. The recorded video file on hub older than this time will be deleted.
+  LocalDataRetentionPeriodInMinutes: 60
+  # KinesisVideoStreamName where video will be streaming to.
+  KinesisVideoStreamName: "test-video-stream"
+  # Live streaming start time. Video will start uploading to Kinesis Video Stream from this time.
+  # This time is cron time. "* * * * *" stands for keep streaming, "-" stands for never start.
+  LiveStreamingStartTime: "*/30 * * * ?"
+  # Live streaming duration time. If LiveStreamingStartTime been set to keep streaming or never start, this value
+  # does not take efforts.
+  LiveStreamingDurationInMinutes: 10
+  # IP camera's RTSP stream url. The url must contains user name and password.
+  # The url will be saved in AWS Secret Manager and protected. Secrets arn will be updated into RTSPStreamSecretARN
+  # Example: rtsp://<username>:<password>@<IP address>:<Portal>/<settings decided by camera type>
+  RTSPStream: rtsp://mockuser:mockpasswork@192.168.0.24:554/mock

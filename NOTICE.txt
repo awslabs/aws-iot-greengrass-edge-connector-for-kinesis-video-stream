@@ -1,0 +1,45 @@
+This package depends on and may incorporate or retrieve a number of third-party
+software packages (such as open source packages) at install-time or build-time
+or run-time ("External Dependencies"). The External Dependencies are subject to
+license terms that you must accept in order to use this package. If you do not
+accept all of the applicable license terms, you should not use this package. We
+recommend that you consult your companyâ€™s open source approval policy before
+proceeding.
+
+Provided below is a list of External Dependencies and the applicable license
+identification as indicated by the documentation associated with the External
+Dependencies as of Amazon's most recent review.
+
+THIS INFORMATION IS PROVIDED FOR CONVENIENCE ONLY. AMAZON DOES NOT PROMISE THAT
+THE LIST OR THE APPLICABLE TERMS AND CONDITIONS ARE COMPLETE, ACCURATE, OR
+UP-TO-DATE, AND AMAZON WILL HAVE NO LIABILITY FOR ANY INACCURACIES. YOU SHOULD
+CONSULT THE DOWNLOAD SITES FOR THE EXTERNAL DEPENDENCIES FOR THE MOST COMPLETE
+AND UP-TO-DATE LICENSING INFORMATION.
+
+YOUR USE OF THE EXTERNAL DEPENDENCIES IS AT YOUR SOLE RISK. IN NO EVENT WILL
+AMAZON BE LIABLE FOR ANY DAMAGES, INCLUDING WITHOUT LIMITATION ANY DIRECT,
+INDIRECT, CONSEQUENTIAL, SPECIAL, INCIDENTAL, OR PUNITIVE DAMAGES (INCLUDING
+FOR ANY LOSS OF GOODWILL, BUSINESS INTERRUPTION, LOST PROFITS OR DATA, OR
+COMPUTER FAILURE OR MALFUNCTION) ARISING FROM OR RELATING TO THE EXTERNAL
+DEPENDENCIES, HOWEVER CAUSED AND REGARDLESS OF THE THEORY OF LIABILITY, EVEN
+IF AMAZON HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. THESE LIMITATIONS
+AND DISCLAIMERS APPLY EXCEPT TO THE EXTENT PROHIBITED BY APPLICABLE LAW.
+
+THIRD-PARTY-LICENSES:
+
+commons-lang3 (https://mvnrepository.com/artifact/org.apache.commons/commons-lang3) - Apache 2.0
+gst1-java-core (https://mvnrepository.com/artifact/org.freedesktop.gstreamer/gst1-java-core) - LGPL 3.0
+jna (https://mvnrepository.com/artifact/net.java.dev.jna/jna) - Apache 2.0, LGPL 2.1
+jna-platform (https://mvnrepository.com/artifact/net.java.dev.jna/jna-platform)- Apache 2.0, LGPL 2.1
+junit-jupiter-api (https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-api) - EPL 2.0
+junit-jupiter-engine (https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-engine) - EPL 2.0
+log4j-api (https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-api) - Apache 2.0
+log4j-core (https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-core) - Apache 2.0
+lombok (https://mvnrepository.com/artifact/org.projectlombok/lombok) - MIT
+mockito-core (https://mvnrepository.com/artifact/org.mockito/mockito-core)- MIT
+mockito-inline (https://mvnrepository.com/artifact/org.mockito/mockito-inline) - MIT
+mockito-junit-jupiter (https://mvnrepository.com/artifact/org.mockito/mockito-junit-jupiter) - MIT
+pyyaml (https://github.com/yaml/pyyaml) - MIT
+quartz (https://mvnrepository.com/artifact/org.quartz-scheduler/quartz) - Apache 2.0
+slf4j-api (https://mvnrepository.com/artifact/org.slf4j/slf4j-api) - MIT
+system-stubs-jupiter (https://mvnrepository.com/artifact/uk.org.webcompere/system-stubs-jupiter) - MIT
