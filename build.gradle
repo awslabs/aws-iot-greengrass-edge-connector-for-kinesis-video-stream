@@ -1,0 +1,184 @@
+/*
+ Applies core Gradle plugins, which are ones built into Gradle itself.
+*/
+plugins {
+  // Java for compile and unit test of Java source files. Read more at:
+  // https://docs.gradle.org/current/userguide/java_plugin.html
+  id 'java'
+
+  // Application for creating an executable JVM application. Read more at:
+  // https://docs.gradle.org/current/userguide/application_plugin.html
+  id 'application'
+
+  // Checkstyle for style checks and reports on Java source files. Read more at:
+  // https://docs.gradle.org/current/userguide/checkstyle_plugin.html
+  id 'checkstyle'
+
+  // JaCoCo for coverage metrics and reports of Java source files. Read more at:
+  // https://docs.gradle.org/current/userguide/jacoco_plugin.html
+  id 'jacoco'
+
+  // SpotBugs for static analysis to look for bugs in Java code. Read more at:
+  // https://plugins.gradle.org/plugin/com.github.spotbugs
+  id "com.github.spotbugs" version "4.7.9"
+
+  // Gradle Shadow creating fat/uber JARs with support for package relocation. Read more at:
+  // https://plugins.gradle.org/plugin/com.github.johnrengelman.shadow
+  id "com.github.johnrengelman.shadow" version "7.1.0"
+}
+
+version = '1.0'
+
+sourceCompatibility = 1.8
+
+buildDir = 'build'
+
+mainClassName = 'com.aws.iot.edgeconnectorforkvs.EdgeConnectorForKVSService'
+
+/*
+ Configures the JUnit5
+*/
+test {
+  useJUnitPlatform()
+  finalizedBy jacocoTestReport // report is always generated after tests run
+}
+
+/*
+ Configures the CheckStyle
+*/
+checkstyle {
+  sourceSets = [sourceSets.main]
+  ignoreFailures = true
+}
+
+/*
+ Configures the SpotBugs
+*/
+spotbugs {
+  excludeFilter = file("config/spotbugs/exclude.xml")
+  ignoreFailures = false
+}
+
+spotbugsTest {
+  ignoreFailures = false
+}
+
+/*
+ Configures the JaCoCo
+*/
+check.dependsOn jacocoTestCoverageVerification
+
+jacocoTestReport {
+    dependsOn test
+}
+
+def excludedPackages = [
+        "*/model/**",
+        "*/EdgeConnectorForKVSService.java"
+]
+
+jacocoTestCoverageVerification {
+    violationRules {
+        afterEvaluate {
+            getClassDirectories().setFrom(classDirectories.files.collect {
+                fileTree(dir: it, exclude: excludedPackages)
+            })
+        }
+        rule {
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 0.80
+            }
+        }
+        rule {
+            limit {
+                counter = 'BRANCH'
+                value = 'COVEREDRATIO'
+                minimum = 0.80
+            }
+        }
+    }
+}
+
+/*
+ Configures the Gradle Shadow.
+*/
+shadowJar {
+    archiveBaseName.set('EdgeConnectorForKVS')
+    archiveClassifier.set('super')
+    archiveVersion.set('1.0')
+
+    destinationDirectory.fileValue(file('output'))
+    zip64 true
+
+    // exclude licenses from dependencies
+    exclude 'META-INF/LICENSE.txt'
+    exclude 'META-INF/LICENSE'
+    exclude 'META-INF/NOTICE.txt'
+    exclude 'META-INF/NOTICE'
+    exclude 'META-INF/io.netty.versions.properties'
+
+    // exclude poms from dependencies
+    exclude 'META-INF/maven/**'
+
+    // exclude OSGI from dependencies
+    exclude 'OSGI-INF/**'
+
+    // Exclude any signed jars or else fat jar will not be executable
+    exclude 'META-INF/*.SF'
+    exclude 'META-INF/*.DSA'
+    exclude 'META-INF/*.RSA'
+}
+
+/*
+ Configures the dependencies.
+*/
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+  // Lombok
+  implementation group: 'org.projectlombok', name: 'lombok', version: '1.18.22'
+  annotationProcessor group: 'org.projectlombok', name: 'lombok', version: '1.18.22'
+  testImplementation group: 'org.projectlombok', name: 'lombok', version: '1.18.22'
+  testAnnotationProcessor group: 'org.projectlombok', name: 'lombok', version: '1.18.22'
+
+  // AWS Greengrass Stream Manager
+  implementation group: 'com.fasterxml.jackson.core', name: 'jackson-annotations', version: '2.12.3'
+  implementation group: 'com.fasterxml.jackson.core', name: 'jackson-core', version: '2.12.3'
+  implementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.12.3'
+  implementation group: 'com.fasterxml.jackson.dataformat', name: 'jackson-dataformat-cbor', version: '2.12.3'
+  implementation group: 'javax.validation', name: 'validation-api', version: '1.0.0.GA'
+  implementation fileTree(dir: 'libs', include: ['*.jar'])
+
+  // Compile
+  implementation group: 'com.amazonaws', name: 'amazon-kinesis-video-streams-parser-library', version: '1.0.15'
+  implementation group: 'com.amazonaws', name: 'aws-java-sdk-greengrassv2', version: '1.12.111'
+  implementation group: 'net.java.dev.jna', name: 'jna', version: '5.10.0'
+  implementation group: 'net.java.dev.jna', name: 'jna-platform', version: '5.10.0'
+  implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.12.0'
+  implementation group: 'org.apache.logging.log4j', name: 'log4j-api', version: '2.14.1'
+  implementation group: 'org.apache.logging.log4j', name: 'log4j-core', version: '2.14.1'
+  implementation group: 'org.freedesktop.gstreamer', name: 'gst1-java-core', version: '1.4.0'
+  implementation group: 'org.quartz-scheduler', name: 'quartz', version: '2.3.2'
+  implementation group: 'org.slf4j', name: 'slf4j-api', version: '1.7.32'
+  implementation group: 'software.amazon.awssdk', name: 'greengrassv2', version: '2.17.82'
+  implementation group: 'software.amazon.awssdk', name: 'iotsitewise', version: '2.17.82'
+  implementation group: 'software.amazon.awssdk', name: 'secretsmanager', version: '2.17.82'
+  implementation group: 'software.amazon.awssdk.crt', name: 'aws-crt', version: '0.15.9'
+  implementation group: 'software.amazon.awssdk.iotdevicesdk', name: 'aws-iot-device-sdk', version: '1.5.4'
+
+  // Test
+  testImplementation group: 'org.junit.jupiter', name: 'junit-jupiter-api', version: '5.8.1'
+  testRuntimeOnly group: 'org.junit.jupiter', name: 'junit-jupiter-engine', version: '5.8.1'
+  testImplementation group: 'org.mockito', name: 'mockito-core', version: '4.0.0'
+  testImplementation group: 'org.mockito', name: 'mockito-inline', version: '4.0.0'
+  testImplementation group: 'org.mockito', name: 'mockito-junit-jupiter', version: '4.0.0'
+  testImplementation group: 'org.slf4j', name: 'slf4j-simple', version: '1.7.32'
+  testImplementation group: 'uk.org.webcompere', name: 'system-stubs-jupiter', version: '1.2.0'
+}
+
+// generate an uber jar
+task release(dependsOn: [build, shadowJar])
