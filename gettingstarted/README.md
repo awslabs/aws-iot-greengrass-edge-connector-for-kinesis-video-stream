@@ -42,7 +42,9 @@ Step 3. After execute, script will generated following resources:
   - If configured Kinesis Video Stream name does not exist, create the stream
   - Secret ARN to store camera's RTSP url.
 ## Configure SiteWise Assets
-**Note:** Many of the camera model attributes use Cron time formatted strings `* * * * *`. For more information on using this format see the [UNIX cron format](https://www.ibm.com/docs/en/db2oc?topic=task-unix-cron-forma). Use a single dash `-` in an express to signal never, and use all stars `*` to singal always in an attribute. Each attribute is defined as follows:
+**Note:** Many of the camera model attributes use Cron time formatted strings `* * * * *`. 
+The format followed by EdgeConnectorForKVS is `Minutes, Hours, Day of Month, Month, Day of Week`
+For more information on using this format see the [Quartz Cron Triggering](http://www.quartz-scheduler.org/documentation/quartz-2.3.0/tutorials/crontrigger.html). EdgeConnectorForKVS uses a single dash `-` to express never, and use all stars `* * * * *` to express always in an attribute. Each attribute is defined as follows:
   - **KinesisVideoStreamName:** The name of your video stream. You use this name in your Grafana dashboard video panel, to stream in video in Grafana.
   - **RTSPStreamSecretARN:** Most IP Cameras with streaming capabilities use username, password based authentication as a security measure. This secret can be updated in Amazon Secrets Manager to store the camera's RTSP URL information along with its credentials. For steps on editing the secret ARN in Amazon Secrets Manager, see https://docs.aws.amazon.com/secretsmanager/latest/userguide/intro.html#asm_access" Access Secrets Manager.
   - **LocalDataRetentionPeriodInMinutes:** How long the stream data is retained on the device. The unit is measured in minutes.
