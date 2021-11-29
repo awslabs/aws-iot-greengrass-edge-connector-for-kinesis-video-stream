@@ -33,7 +33,6 @@ You must the update policy for the ***GGEdgeConnectorForKVSHubDockerTestTokenExc
         "logs:PutLogEvents",
         "logs:DescribeLogStreams",
         "s3:GetBucketLocation",
-        "s3:GetObject",
         "secretsmanager:GetSecretValue",
         "iotsitewise:BatchPutAssetPropertyValue",
         "iotsitewise:DescribeAsset",
