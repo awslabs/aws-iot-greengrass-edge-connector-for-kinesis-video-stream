@@ -58,7 +58,8 @@ Note: These instructions have primarily been tested for Mac/Linux environments.
       "Resource": "*"
     }
   ]
-} ```
+   }
+
 - Install [pyyaml](https://github.com/yaml/pyyaml)
   - Quick install, thype this into the command line: ```pip install pyyaml```   
 
