@@ -19,7 +19,7 @@ Code for Greengrass V2 EdgeConnectorForKVS Component. This package uses Gradle b
 ```
 ### Update your IAM policy ###
 
-You must the update policy for the ***GGEdgeConnectorForKVSHubDockerTestTokenExchangeRole** in the IAM console. This role is created when you install the Greengrass core device software. Update the role's policy, by replacing it with the following policy. 
+You must update the policy for the Greengrass TokenExchangeRole in the IAM console. This role is created when you install the Greengrass core device software. Update the role's policy, by replacing it with the following policy. 
 
 ```
 "Version": "2012-10-17",
