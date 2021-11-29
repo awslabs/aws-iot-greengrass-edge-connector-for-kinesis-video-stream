@@ -47,7 +47,7 @@ The format followed by EdgeConnectorForKVS is `Minutes, Hours, Day of Month, Mon
 For more information on using this format see the [Quartz Cron Triggering](http://www.quartz-scheduler.org/documentation/quartz-2.3.0/tutorials/crontrigger.html). EdgeConnectorForKVS uses a single dash `-` to express never, and use all stars `* * * * *` to express always in an attribute. Each attribute is defined as follows:
   - **KinesisVideoStreamName:** The name of your video stream. You use this name in your Grafana dashboard video panel, to stream in video in Grafana.
   - **RTSPStreamSecretARN:** Most IP Cameras with streaming capabilities use username, password based authentication as a security measure. This secret can be updated in Amazon Secrets Manager to store the camera's RTSP URL information along with its credentials. For steps on editing the secret ARN in Amazon Secrets Manager, see https://docs.aws.amazon.com/secretsmanager/latest/userguide/intro.html#asm_access" Access Secrets Manager.
-  - **LocalDataRetentionPeriodInMinutes:** How long the stream data is retained on the device. The unit is measured in minutes.
+  - **LocalDataRetentionPeriodInMinutes:** How long the captured local video file will retain on the device. The unit is measured in minutes.
   - **LiveStreamingStartTime:** The time the componenet will start sending data from your device to Amazon Kensis video streams.
   - **LiveStreamingDurationInMinutes:** The total time a camera will send video to Amazon Kensis video streams. 
   - **CaptureStartTime:** The start time of the local recording.
