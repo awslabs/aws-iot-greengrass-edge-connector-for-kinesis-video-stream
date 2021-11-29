@@ -56,7 +56,7 @@ You must update the policy for the Greengrass TokenExchangeRole in the IAM conso
 
 ## Deploy the Greengrass component to your device ##
 
-Complete the following steps to deploy the edge Connector component to your core device:
+Complete the following steps to deploy the EdgeConnectorForKVS component to your core device:
 
 1. Sign in to the &GG; console. In the navigation menu, choose **Components**.
 2. On the **Components** page, on the **Public components** tab, choose <code>aws.iot.EdgeConnectorForKVS</code>.</para>
