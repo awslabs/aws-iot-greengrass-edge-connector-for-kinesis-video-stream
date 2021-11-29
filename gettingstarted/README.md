@@ -25,9 +25,42 @@ Note: These instructions have primarily been tested for Mac/Linux environments.
      - iotsitewise:DescribeAssetModel          
      - iotsitewise:ListAssets
      - iotsitewise:ListAssetModels     
-     - iotsitewise:UpdateAssetProperty           
+     - iotsitewise:UpdateAssetProperty     
+- If you want to update the role in the AWS IAM console, use the following JSON: 
+  ```{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "iot:DescribeCertificate",
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogStreams",
+        "s3:GetBucketLocation",
+        "s3:GetObject",
+        "secretsmanager:GetSecretValue",
+        "iotsitewise:BatchPutAssetPropertyValue",
+        "iotsitewise:DescribeAsset",
+        "iotsitewise:DescribeAssetModel",
+        "iotsitewise:ListAssetRelationships",
+        "iotsitewise:ListAssets",
+        "iotsitewise:ListAssociatedAssets",
+        "iotsitewise:DescribeAssetProperty",
+        "iotsitewise:GetAssetPropertyValue",
+        "kinesisvideo:DescribeStream",
+        "kinesisvideo:PutMedia",
+        "kinesisvideo:TagStream",
+        "kinesisvideo:GetDataEndpoint",
+        "kinesisvideo:CreateStream"
+            ].
+      "Resource": "*"
+    }
+  ]
+} ```
 - Install [pyyaml](https://github.com/yaml/pyyaml)
-  - Quick install: ```pip install pyyaml```   
+  - Quick install, thype this into the command line: ```pip install pyyaml```   
 
 ## How to use
 Step 1. Edit resource_configure.yml
@@ -41,7 +74,18 @@ Step 3. After execute, script will generated following resources:
   - SiteWise assets for hubs and cameras
   - If configured Kinesis Video Stream name does not exist, create the stream
   - Secret ARN to store camera's RTSP url.
-  
+## Configure SiteWise Assets
+**Note:** Many of the camera model attributes use Cron time formatted strings `* * * * *`. For more information on using this format see the [UNIX cron format](https://www.ibm.com/docs/en/db2oc?topic=task-unix-cron-forma). Use all dashes `-` in an express to signal never, and use all stars `*` to singal always in an attribute. Each attribute is defined as follows:
+  - **KinesisVideoStreamName:** The name of your video stream. You use this name in your Grafana dashboard video panel, to stream in video in Grafan.
+  - **RTSPStreamSecretARN:** Many cameras with streaming capabilities, use a login sytem with a username and password as a security measure. This ARN can be updated in &ASM; to to store the cameras login information. For steps on editing the secert ARN in Amazon Secerts Manager, see https://docs.aws.amazon.com//secretsmanager/latest/userguide/intro.html#asm_access" Access Secrets Manager.
+  - **LocalDataRetentionPeriodInMinutes:** How long the stream data is retained on the device. The unit is measured in minutes.
+  - **LiveStreamingStartTime:** The time the componenet will start sending data from your device to Amazon Kensis video streams.
+  - **LiveStreamingDurationInMinutes:** The total time a camera will send video to Amazon Kensis video streams. 
+  - **CaptureStartTime:** The start time of the local recording.
+  - **CaptureDurationInMinutes:** The total time the device will record video locally.
+**Note:** The **LiveStreamingDurationInMinutes** and **LiveStreamingStartTime** cannot be more frequent that the **CaptureDurationInMinutes** and the **CaptureStartTime**.
+
+
 After these steps, please go to AWS SiteWise console and check the new created SiteWise asset for hub device. Using it's asset Id to configure Edge connector for Kinesis Video Streams and finish the deployment.
 
 ## Notes
