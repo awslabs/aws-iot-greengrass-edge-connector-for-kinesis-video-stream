@@ -56,4 +56,4 @@ Step 3. After execute, script will generated following resources:
 After these steps, please go to AWS SiteWise console and check the new created SiteWise asset for hub device. Using it's asset Id to configure Edge connector for Kinesis Video Streams and finish the deployment.
 
 ## Notes
-After creation, please remove the content in the resource_configure.yml to preventing information leaking.
+After creation, please remove the content in the `resource_configure.yml` file to prevent information leak.
