@@ -69,4 +69,5 @@ Complete the following steps to deploy the EdgeConnectorForKVS component to your
 9. On the **Configure advanced setting** page, keep the default configuration settings, and choose **Next**.
 10. On the **Review** page, click **Deploy** to finish the deployment.
                      
-During installation, the component adds a symbolic link to `greengrass-cli` in the `Greengrass/v2/bin` folder on your device, and you run the edge connector component from this path. To run the edge Connector component without its absolute path, add your `Greengrass/v2/bin` folder to your PATH variable. If there is any SiteWise configuration change, please use greengrass-cli to restart the component.
+If there is any SiteWise configuration change, please use `greengrass-cli` to restart the component.
+`/greengrass/v2/bin/greengrass-cli component restart --names "aws.iot.EdgeConnectorForKVS"`
