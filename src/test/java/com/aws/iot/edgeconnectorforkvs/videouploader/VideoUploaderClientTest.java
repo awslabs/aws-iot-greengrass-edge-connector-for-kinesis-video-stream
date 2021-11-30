@@ -392,6 +392,8 @@ public class VideoUploaderClientTest {
                     uploadCallBack);
         }).start();
 
+        Thread.sleep(STATUS_CHANGED_TIME);
+        
         // wait until task start
         while (!videoUploaderClient.isOpen()) {
             System.out.println("task is not running");
@@ -404,6 +406,7 @@ public class VideoUploaderClientTest {
                 .withAckEventType(AckEventType.Values.PERSISTED);
         event.setFragmentTimecode(1L);
         putMediaAckResponseArgumentCaptor.getValue().onAckEvent(event);
+        Thread.sleep(STATUS_CHANGED_TIME); // Wait stream manager update values
         putMediaAckResponseArgumentCaptor.getValue().onComplete();
 
         // wait until task end
