@@ -54,7 +54,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.Setter;
+import lombok.Synchronized;
 import lombok.extern.slf4j.Slf4j;
 import software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
@@ -66,6 +66,7 @@ import java.io.PipedOutputStream;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -110,7 +111,7 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
     private SiteWiseManager siteWiseManager;
     private SecretsClient secretsClient;
     private KvsClient kvsClient;
-    private List<EdgeConnectorForKVSConfiguration> edgeConnectorForKVSConfigurationList;
+    private static List<EdgeConnectorForKVSConfiguration> edgeConnectorForKVSConfigurationList;
     private String videoRecordingRootPath;
     private ExecutorService recorderService;
     private String regionName;
@@ -121,8 +122,7 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
     private ExecutorService liveStreamingExecutor;
     @Getter
     private ScheduledExecutorService stopLiveStreamingExecutor;
-    @Setter
-    private int restartSleepTime = RECORDER_RESTART_TIME_GAP_MILLI_SECONDS;
+    private final int restartSleepTime = RECORDER_RESTART_TIME_GAP_MILLI_SECONDS;
     private StreamManager.StreamManagerBuilder streamManagerBuilder;
     private VideoUploadRequestHandler videoUploadRequestHandler;
     private boolean retryOnFail;
@@ -132,11 +132,11 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
         this.videoRecordingRootPath = WORK_DIR_ROOT_PATH;
         this.awsCredentialsProviderV1 = getContainerCredentialsProviderV1();
         this.siteWiseClient = new SiteWiseClient(ContainerCredentialsProvider.builder().build(),
-                Region.of(regionName));
+            Region.of(regionName));
         this.siteWiseManager = SiteWiseManager.builder().siteWiseClient(siteWiseClient).build();
         this.secretsClient = new SecretsClient(ContainerCredentialsProvider.builder().build(), Region.of(regionName));
         this.kvsClient = new KvsClient(awsCredentialsProviderV1,
-                com.amazonaws.regions.Region.getRegion(Regions.fromName(regionName)));
+            com.amazonaws.regions.Region.getRegion(Regions.fromName(regionName)));
         this.edgeConnectorForKVSConfigurationMap = new Hashtable<>();
         this.streamManagerBuilder = StreamManager.builder();
         this.videoUploadRequestHandler = new VideoUploadRequestHandler();
@@ -145,45 +145,52 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
 
     private com.amazonaws.auth.ContainerCredentialsProvider getContainerCredentialsProviderV1() {
         return new com.amazonaws.auth.ContainerCredentialsProvider(
-                new CredentialsEndpointProvider() {
-                    @Override
-                    public URI getCredentialsEndpoint() {
-                        return URI.create(System.getenv("AWS_CONTAINER_CREDENTIALS_FULL_URI"));
-                    }
+            new CredentialsEndpointProvider() {
+                @Override
+                public URI getCredentialsEndpoint() {
+                    return URI.create(System.getenv("AWS_CONTAINER_CREDENTIALS_FULL_URI"));
+                }
 
-                    @Override
-                    public Map<String, String> getHeaders() {
-                        if (System.getenv("AWS_CONTAINER_AUTHORIZATION_TOKEN") != null) {
-                            return Collections.singletonMap("Authorization",
-                                    System.getenv("AWS_CONTAINER_AUTHORIZATION_TOKEN"));
-                        }
-                        return new HashMap<String, String>();
+                @Override
+                public Map<String, String> getHeaders() {
+                    if (System.getenv("AWS_CONTAINER_AUTHORIZATION_TOKEN") != null) {
+                        return Collections.singletonMap("Authorization",
+                            System.getenv("AWS_CONTAINER_AUTHORIZATION_TOKEN"));
                     }
-                });
+                    return new HashMap<String, String>();
+                }
+            });
     }
 
-    public void setUpEdgeConnectorForKVSService() throws IOException {
-
+    public void setUpSharedEdgeConnectorForKVSService() throws IOException {
         // Step 1. Get configuration from GG configuration
         //         Verify input configurations. Get all Camera configuration from SiteWise asset.
         //         Sink SiteWise assets values.
         initConfiguration();
         // Step 2. Retrieve RTSP Stream URL from Secrets
         initSecretsManager();
-        // Step 3. Init scheduler
-        initScheduler();
-        // Step 4. Verify provided KVS name. Create KVS stream is resource not found.
+        // Step 3. Verify provided KVS name. Create KVS stream if resource not found.
         initKinesisVideoStream();
-        // Step 5. Init disk management thread. Including heart beat.
+        // Step 4. Init disk management thread. Including heart beat.
         initDiskManagement();
-        // Step 6. Init Stream Managers to push data to SiteWise
+        // Step 5. Init Stream Managers to push data to SiteWise
         initStreamManagers();
+    }
+
+    public void setUpCameraLevelEdgeConnectorForKVSService(
+        // Re-add configuration to map
+        final EdgeConnectorForKVSConfiguration configuration) {
+        if (edgeConnectorForKVSConfigurationMap.get(configuration.kinesisVideoStreamName) == null) {
+            edgeConnectorForKVSConfigurationMap.put(configuration.kinesisVideoStreamName, configuration);
+        }
+        // Step 6. Init scheduler
+        initScheduler(configuration);
         // Step 7. Init video recorder
-        initVideoRecorders();
+        initVideoRecorders(configuration);
         // Step 8. Init video uploader
-        initVideoUploaders();
+        initVideoUploaders(configuration);
         // Step 9. Subscribe to MQTT
-        initMQTTSubscription();
+        initMQTTSubscription(configuration);
         // Step 10. Start scheduler at the end
         jobScheduler.start();
     }
@@ -191,55 +198,53 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
     private void initConfiguration() throws IOException {
         // Pull and init needed camera configurations from SiteWise
         edgeConnectorForKVSConfigurationList = siteWiseManager
-                .initEdgeConnectorForKVSServiceConfiguration(hubSiteWiseAssetId);
+            .initEdgeConnectorForKVSServiceConfiguration(hubSiteWiseAssetId);
         for (EdgeConnectorForKVSConfiguration edgeConnectorForKVSConfiguration : edgeConnectorForKVSConfigurationList) {
             generateRecordingPath(edgeConnectorForKVSConfiguration);
             edgeConnectorForKVSConfiguration.setProcessLock(new ReentrantLock());
             edgeConnectorForKVSConfiguration.setRecordingRequestsCount(0);
             edgeConnectorForKVSConfiguration.setLiveStreamingRequestsCount(0);
+            edgeConnectorForKVSConfiguration.setFatalStatus(new AtomicBoolean(false));
         }
         edgeConnectorForKVSConfigurationMap = edgeConnectorForKVSConfigurationList.stream()
-                .collect(Collectors.toMap(EdgeConnectorForKVSConfiguration::getKinesisVideoStreamName,
-                        Function.identity()));
+            .collect(Collectors.toMap(EdgeConnectorForKVSConfiguration::getKinesisVideoStreamName,
+                Function.identity()));
     }
 
     private void initSecretsManager() {
         log.info("Retrieving Secret Value for RTSP Stream URL");
         edgeConnectorForKVSConfigurationList
-                .forEach(configuration -> {
-                    String secretValue = this.secretsClient.getSecretValue(configuration.getRtspStreamSecretARN());
-                    Map<String, Object> jsonMap = JSONUtils.jsonToMap(secretValue);
-                    jsonMap.forEach((k, v) -> {
-                        if (k.equalsIgnoreCase(SECRETS_MANAGER_SECRET_KEY)) {
-                            String rtspStreamURL = (String) v;
-                            log.trace(rtspStreamURL);
-                            configuration.setRtspStreamURL(rtspStreamURL);
-                        }
-                    });
+            .forEach(configuration -> {
+                String secretValue = this.secretsClient.getSecretValue(configuration.getRtspStreamSecretARN());
+                Map<String, Object> jsonMap = JSONUtils.jsonToMap(secretValue);
+                jsonMap.forEach((k, v) -> {
+                    if (k.equalsIgnoreCase(SECRETS_MANAGER_SECRET_KEY)) {
+                        String rtspStreamURL = (String) v;
+                        log.trace(rtspStreamURL);
+                        configuration.setRtspStreamURL(rtspStreamURL);
+                    }
                 });
+            });
     }
 
-    private void initScheduler() {
+    private void initScheduler(EdgeConnectorForKVSConfiguration configuration) {
         jobScheduler = new JobScheduler(this);
-        edgeConnectorForKVSConfigurationList
-                .forEach(configuration -> {
-                    // Video Capture
-                    if (!StringUtils.isNullOrEmpty(configuration.getCaptureStartTime()) &&
-                            !configuration.getCaptureStartTime().equals(START_TIME_EXPR_ALWAYS) &&
-                            !configuration.getCaptureStartTime().equals(START_TIME_EXPR_NEVER)) {
-                        jobScheduler.scheduleJob(Constants.JobType.LOCAL_VIDEO_CAPTURE,
-                                configuration.getKinesisVideoStreamName(), configuration.getCaptureStartTime(),
-                                configuration.getCaptureDurationInMinutes());
-                    }
-                    // Live Streaming
-                    if (!StringUtils.isNullOrEmpty(configuration.getLiveStreamingStartTime()) &&
-                            !configuration.getLiveStreamingStartTime().equals(START_TIME_EXPR_ALWAYS) &&
-                            !configuration.getLiveStreamingStartTime().equals(START_TIME_EXPR_NEVER)) {
-                        jobScheduler.scheduleJob(Constants.JobType.LIVE_VIDEO_STREAMING,
-                                configuration.getKinesisVideoStreamName(), configuration.getLiveStreamingStartTime(),
-                                configuration.getLiveStreamingDurationInMinutes());
-                    }
-                });
+        // Video Capture
+        if (!StringUtils.isNullOrEmpty(configuration.getCaptureStartTime()) &&
+            !configuration.getCaptureStartTime().equals(START_TIME_EXPR_ALWAYS) &&
+            !configuration.getCaptureStartTime().equals(START_TIME_EXPR_NEVER)) {
+            jobScheduler.scheduleJob(Constants.JobType.LOCAL_VIDEO_CAPTURE,
+                configuration.getKinesisVideoStreamName(), configuration.getCaptureStartTime(),
+                configuration.getCaptureDurationInMinutes());
+        }
+        // Live Streaming
+        if (!StringUtils.isNullOrEmpty(configuration.getLiveStreamingStartTime()) &&
+            !configuration.getLiveStreamingStartTime().equals(START_TIME_EXPR_ALWAYS) &&
+            !configuration.getLiveStreamingStartTime().equals(START_TIME_EXPR_NEVER)) {
+            jobScheduler.scheduleJob(Constants.JobType.LIVE_VIDEO_STREAMING,
+                configuration.getKinesisVideoStreamName(), configuration.getLiveStreamingStartTime(),
+                configuration.getLiveStreamingDurationInMinutes());
+        }
     }
 
     private void initKinesisVideoStream() {
@@ -248,7 +253,7 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
             Optional<StreamInfo> result = kvsClient.describeStream(kinesisVideoStreamName);
             if (!result.isPresent()) {
                 log.info("Configured KinesisVideoStream name :"
-                        + kinesisVideoStreamName + " does not exist, creating it ...");
+                    + kinesisVideoStreamName + " does not exist, creating it ...");
                 kvsClient.createStream(kinesisVideoStreamName);
                 log.info("Created KinesisVideoStream name :" + kinesisVideoStreamName);
             }
@@ -257,11 +262,11 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
 
     private void initDiskManagement() {
         DiskManager diskManager = new DiskManager(
-                edgeConnectorForKVSConfigurationList,
-                new DiskManagerUtil(),
-                Executors.newCachedThreadPool(),
-                Executors.newScheduledThreadPool(1),
-                new FileHandlingCallBack()
+            edgeConnectorForKVSConfigurationList,
+            new DiskManagerUtil(),
+            Executors.newCachedThreadPool(),
+            Executors.newScheduledThreadPool(1),
+            new FileHandlingCallBack()
         );
         diskManager.initDiskManager();
         diskManager.setupDiskManagerThread();
@@ -269,29 +274,31 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
 
     private void initStreamManagers() {
         edgeConnectorForKVSConfigurationList
-                .forEach(configuration -> {
-                    StreamManager streamManager = streamManagerBuilder.build();
-                    String msgStreamName = configuration.getKinesisVideoStreamName() + "-" +
-                            UUID.randomUUID().toString();
-                    log.info("Creating Message Stream: " + msgStreamName);
-                    streamManager.createMessageStream(msgStreamName);
-                    configuration.setStreamManager(streamManager);
-                });
+            .forEach(configuration -> {
+                StreamManager streamManager = streamManagerBuilder.build();
+                String msgStreamName = configuration.getKinesisVideoStreamName() + "-" +
+                    UUID.randomUUID().toString();
+                log.info("Creating Message Stream: " + msgStreamName);
+                streamManager.createMessageStream(msgStreamName);
+                configuration.setStreamManager(streamManager);
+            });
     }
 
-    private void initVideoRecorders() {
-        recorderService = Executors.newFixedThreadPool(edgeConnectorForKVSConfigurationList.size()
+    private void initVideoRecorders(EdgeConnectorForKVSConfiguration configuration) {
+        // Initialize recorderService once for all cameras
+        if (recorderService == null) {
+            recorderService = Executors.newFixedThreadPool(edgeConnectorForKVSConfigurationList.size()
                 + EXTRA_THREADS_PER_POOL);
-        for (EdgeConnectorForKVSConfiguration configuration : edgeConnectorForKVSConfigurationList) {
-            // Start recording only for assets where CaptureStartTime is set to "* * * * *"
-            if (!StringUtils.isNullOrEmpty(configuration.getCaptureStartTime()) &&
-                    configuration.getCaptureStartTime().equals(START_TIME_EXPR_ALWAYS)) {
-                log.info("Continuous recording configured for stream " + configuration.getKinesisVideoStreamName());
-                recorderService.submit(() -> {
-                    startRecordingJob(configuration);
-                });
-            }
         }
+        // Start recording only for assets where CaptureStartTime is set to "* * * * *"
+        if (!StringUtils.isNullOrEmpty(configuration.getCaptureStartTime()) &&
+            configuration.getCaptureStartTime().equals(START_TIME_EXPR_ALWAYS)) {
+            log.info("Continuous recording configured for stream " + configuration.getKinesisVideoStreamName());
+            recorderService.submit(() -> {
+                startRecordingJob(configuration);
+            });
+        }
+
     }
 
     private void startRecordingJob(EdgeConnectorForKVSConfiguration edgeConnectorForKVSConfiguration) {
@@ -302,10 +309,10 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
                 log.info("Start Recording called for " + edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
                 log.info("Calling function " + Constants.getCallingFunctionName(2));
                 edgeConnectorForKVSConfiguration.setRecordingRequestsCount(edgeConnectorForKVSConfiguration
-                        .getRecordingRequestsCount() + 1);
+                    .getRecordingRequestsCount() + 1);
                 if (edgeConnectorForKVSConfiguration.getRecordingRequestsCount() > 1) {
                     log.info("Recording already running. Requests Count: " +
-                            edgeConnectorForKVSConfiguration.getRecordingRequestsCount());
+                        edgeConnectorForKVSConfiguration.getRecordingRequestsCount());
                     return;
                 }
                 VideoRecorderBuilder builder = new VideoRecorderBuilder(new StatusCallback() {
@@ -313,7 +320,10 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
                     public void notifyStatus(VideoRecorderBase recorder, RecorderStatus status, String description) {
                         String pipeLineName = recorder.getPipeline().getName();
                         log.info("Recorder[" + pipeLineName + "] status changed callback: " + status);
-                        if (status.equals(RecorderStatus.FAILED)) {
+                        // Do not restart recorder when recordingRequestCount is less than 0
+                        // Camera level restart is in progress
+                        if (status.equals(RecorderStatus.FAILED) &&
+                            edgeConnectorForKVSConfiguration.getRecordingRequestsCount() > 0) {
                             log.warn("Recorder failed due to errors. Pipeline name: " + pipeLineName);
                             log.warn("Trying restart recorder");
                             recorderService.submit(() -> {
@@ -336,23 +346,23 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
                 PipedOutputStream outputStream = new PipedOutputStream();
                 builder.registerCamera(CameraType.RTSP, edgeConnectorForKVSConfiguration.getRtspStreamURL());
                 builder.registerFileSink(ContainerType.MATROSKA,
-                        videoRecordingRootPath + edgeConnectorForKVSConfiguration.getSiteWiseAssetId()
-                                + PATH_DELIMITER + "video");
+                    videoRecordingRootPath + edgeConnectorForKVSConfiguration.getSiteWiseAssetId()
+                        + PATH_DELIMITER + "video");
                 builder.registerAppDataCallback(ContainerType.MATROSKA, new GStreamerAppDataCallback());
                 builder.registerAppDataOutputStream(ContainerType.MATROSKA, outputStream);
                 videoRecorder = builder.construct();
                 edgeConnectorForKVSConfiguration.setVideoRecorder(videoRecorder);
                 edgeConnectorForKVSConfiguration.setOutputStream(outputStream);
                 log.info("Recorder for " + edgeConnectorForKVSConfiguration.getKinesisVideoStreamName() +
-                        " has been initialized");
+                    " has been initialized");
             } else {
-                // Recorder cannot init. Will retry the component by Constants.setFatalStatus(true); in the method end
+                // Recorder cannot init. Will retry in the method end
                 log.error("Fail to init recorder for " + edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
             }
         } catch (InterruptedException e) {
             log.error("Init recorder process for " + edgeConnectorForKVSConfiguration.getKinesisVideoStreamName()
-                    + " has been interrupted, re-init component to restart the process.");
-            Constants.setFatalStatus(true);
+                + " has been interrupted, re-init camera to restart the process.");
+            edgeConnectorForKVSConfiguration.getFatalStatus().set(true);
         } finally {
             if (processLock.isHeldByCurrentThread()) processLock.unlock();
         }
@@ -362,7 +372,7 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
             videoRecorder.startRecording();
         } else {
             log.error("Fail to init recorder for " + edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
-            Constants.setFatalStatus(true);
+            edgeConnectorForKVSConfiguration.getFatalStatus().set(true);
         }
     }
 
@@ -370,79 +380,95 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
         ReentrantLock processLock = edgeConnectorForKVSConfiguration.getProcessLock();
         try {
             if (processLock.tryLock(
-                    INIT_LOCK_TIMEOUT_IN_SECONDS, TimeUnit.SECONDS)) {
+                INIT_LOCK_TIMEOUT_IN_SECONDS, TimeUnit.SECONDS)) {
                 log.info("Stop Recording called for " + edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
                 log.info("Calling function " + Constants.getCallingFunctionName(2));
                 VideoRecorder videoRecorder = edgeConnectorForKVSConfiguration.getVideoRecorder();
                 // Stop video recording provided there's no live streaming / scheduled recording in progress
                 edgeConnectorForKVSConfiguration.setRecordingRequestsCount(edgeConnectorForKVSConfiguration
-                        .getRecordingRequestsCount() - 1);
+                    .getRecordingRequestsCount() - 1);
                 if (edgeConnectorForKVSConfiguration.getRecordingRequestsCount() > 0) {
                     log.info("Recording is requested by multiple tasks. Requests Count " +
-                            edgeConnectorForKVSConfiguration.getRecordingRequestsCount());
+                        edgeConnectorForKVSConfiguration.getRecordingRequestsCount());
                     return;
                 }
                 log.info("Recorder Requests Count is 0. Stopping.");
-                videoRecorder.stopRecording();
-                // TODO: poll recorder state until STOPPED
+                int maxRetry = 5;
+                while (!videoRecorder.getStatus().equals(RecorderStatus.STOPPED)) {
+                    videoRecorder.stopRecording();
+                    if (maxRetry > 0) {
+                        maxRetry--;
+                    } else {
+                        log.error("Max retry reached to stop recorder for " +
+                            edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
+                        edgeConnectorForKVSConfiguration.getFatalStatus().set(true);
+                        break;
+                    }
+                    Thread.sleep(WAIT_TIME_BEFORE_RESTART_IN_MILLISECS);
+                }
+                // Close the pipeline, so we don't have duplicate videos after restart
+                if (videoRecorder != null && videoRecorder.getPipeline() != null) {
+                    edgeConnectorForKVSConfiguration.getVideoRecorder().getPipeline().close();
+                }
             } else {
                 log.error("Fail to stop recorder for " + edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
-                Constants.setFatalStatus(true);
+                edgeConnectorForKVSConfiguration.getFatalStatus().set(true);
             }
         } catch (InterruptedException e) {
             log.error("Stop recorder for " + edgeConnectorForKVSConfiguration.getKinesisVideoStreamName()
-                    + " has been interrupted, re-init component to restart the process.");
-            Constants.setFatalStatus(true);
+                + " has been interrupted, re-init camera to restart the process.");
+            edgeConnectorForKVSConfiguration.getFatalStatus().set(true);
         } finally {
             if (processLock.isHeldByCurrentThread()) processLock.unlock();
         }
     }
 
     private void generateRecordingPath(EdgeConnectorForKVSConfiguration edgeConnectorForKVSConfiguration)
-            throws IOException {
+        throws IOException {
         String filePath =
-                videoRecordingRootPath + edgeConnectorForKVSConfiguration.getSiteWiseAssetId() + PATH_DELIMITER;
+            videoRecordingRootPath + edgeConnectorForKVSConfiguration.getSiteWiseAssetId() + PATH_DELIMITER;
         //Create target folder if not exists
         Files.createDirectories(Paths.get(filePath));
         edgeConnectorForKVSConfiguration.setVideoRecordFolderPath(
-                Paths.get(filePath)
+            Paths.get(filePath)
         );
     }
 
-    private void initVideoUploaders() {
-        liveStreamingExecutor = Executors.newFixedThreadPool(
+    private void initVideoUploaders(EdgeConnectorForKVSConfiguration configuration) {
+        if (liveStreamingExecutor == null) {
+            liveStreamingExecutor = Executors.newFixedThreadPool(
                 edgeConnectorForKVSConfigurationList.size() + EXTRA_THREADS_PER_POOL);
-        stopLiveStreamingExecutor = Executors.newScheduledThreadPool(
+        }
+        if (stopLiveStreamingExecutor == null) {
+            stopLiveStreamingExecutor = Executors.newScheduledThreadPool(
                 edgeConnectorForKVSConfigurationList.size() + EXTRA_THREADS_PER_POOL);
-        edgeConnectorForKVSConfigurationList
-                .forEach(configuration -> {
-                    configuration.setInputStream(new PipedInputStream());
-                    configuration.setVideoUploader(generateVideoUploader(configuration));
-                    // Start live streaming only for assets where LiveStreamingStartTime is set to "* * * * *"
-                    if (!StringUtils.isNullOrEmpty(configuration.getLiveStreamingStartTime()) &&
-                            configuration.getLiveStreamingStartTime().equals(START_TIME_EXPR_ALWAYS)) {
-                        log.info("Continuous live streaming configured for stream " +
-                                configuration.getKinesisVideoStreamName());
-                        liveStreamingExecutor.submit(() -> {
-                            try {
-                                startLiveVideoStreaming(configuration);
-                            } catch (Exception ex) {
-                                log.error("Start Live Streaming Exception ({}): {}", ex.getClass().getName(),
-                                        ex.getMessage());
-                                Constants.setFatalStatus(true);
-                            }
-                        });
-                    }
-                });
+        }
+        configuration.setInputStream(new PipedInputStream());
+        configuration.setVideoUploader(generateVideoUploader(configuration));
+        // Start live streaming only for assets where LiveStreamingStartTime is set to "* * * * *"
+        if (!StringUtils.isNullOrEmpty(configuration.getLiveStreamingStartTime()) &&
+            configuration.getLiveStreamingStartTime().equals(START_TIME_EXPR_ALWAYS)) {
+            log.info("Continuous live streaming configured for stream " +
+                configuration.getKinesisVideoStreamName());
+            liveStreamingExecutor.submit(() -> {
+                try {
+                    startLiveVideoStreaming(configuration);
+                } catch (Exception ex) {
+                    log.error("Start Live Streaming Exception ({}): {}", ex.getClass().getName(),
+                        ex.getMessage());
+                    configuration.getFatalStatus().set(true);
+                }
+            });
+        }
     }
 
     private VideoUploader generateVideoUploader(EdgeConnectorForKVSConfiguration edgeConnectorForKVSConfiguration) {
         return VideoUploaderClient.builder()
-                .awsCredentialsProvider(awsCredentialsProviderV1)
-                .region(com.amazonaws.regions.Region.getRegion(Regions.fromName(regionName)))
-                .kvsStreamName(edgeConnectorForKVSConfiguration.getKinesisVideoStreamName())
-                .recordFilePath(edgeConnectorForKVSConfiguration.getVideoRecordFolderPath().toString())
-                .build();
+            .awsCredentialsProvider(awsCredentialsProviderV1)
+            .region(com.amazonaws.regions.Region.getRegion(Regions.fromName(regionName)))
+            .kvsStreamName(edgeConnectorForKVSConfiguration.getKinesisVideoStreamName())
+            .recordFilePath(edgeConnectorForKVSConfiguration.getVideoRecordFolderPath().toString())
+            .build();
     }
 
     private void flushInputStream(InputStream inputStream) throws IOException {
@@ -458,16 +484,17 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
     private void startHistoricalVideoUploading(EdgeConnectorForKVSConfiguration configuration, long startTime,
                                                long endTime) throws InterruptedException {
         log.info("Start uploading video between " + startTime + " and "
-                + endTime + " for stream "
-                + configuration.getKinesisVideoStreamName());
+            + endTime + " for stream "
+            + configuration.getKinesisVideoStreamName());
         VideoUploader videoUploader = generateVideoUploader(configuration);
         Date dStartTime = new Date(startTime);
         Date dEndTime = new Date(endTime);
         boolean isUploadingFinished = false;
+
         do {
             try {
                 videoUploader.uploadHistoricalVideo(dStartTime, dEndTime,
-                        new StatusChangedCallBack(), new UploadCallBack(dStartTime, configuration));
+                    new StatusChangedCallBack(), new UploadCallBack(dStartTime, configuration));
                 isUploadingFinished = true;
             } catch (Exception ex) {
                 // Log error and retry historical uploading process
@@ -477,30 +504,30 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
     }
 
     private void startLiveVideoStreaming(EdgeConnectorForKVSConfiguration edgeConnectorForKVSConfiguration)
-            throws IOException, InterruptedException {
+        throws IOException, InterruptedException {
         ReentrantLock processLock = edgeConnectorForKVSConfiguration.getProcessLock();
         try {
             if (processLock.tryLock(
-                    INIT_LOCK_TIMEOUT_IN_SECONDS, TimeUnit.SECONDS)) {
+                INIT_LOCK_TIMEOUT_IN_SECONDS, TimeUnit.SECONDS)) {
                 log.info("Start Live Video Streaming Called for " +
-                        edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
+                    edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
                 log.info("Calling function " + Constants.getCallingFunctionName(2));
                 edgeConnectorForKVSConfiguration.setLiveStreamingRequestsCount(edgeConnectorForKVSConfiguration
-                        .getLiveStreamingRequestsCount() + 1);
+                    .getLiveStreamingRequestsCount() + 1);
                 if (edgeConnectorForKVSConfiguration.getLiveStreamingRequestsCount() > 1) {
                     log.info("Live Streaming already running. Requests Count: " +
-                            edgeConnectorForKVSConfiguration.getLiveStreamingRequestsCount());
+                        edgeConnectorForKVSConfiguration.getLiveStreamingRequestsCount());
                     return;
                 }
             } else {
                 log.error("Start uploading for " + edgeConnectorForKVSConfiguration.getKinesisVideoStreamName()
-                        + " timeout, re-init component to restart the process.");
-                Constants.setFatalStatus(true);
+                    + " timeout, re-init camera to restart the process.");
+                edgeConnectorForKVSConfiguration.getFatalStatus().set(true);
             }
         } catch (InterruptedException e) {
             log.error("Start uploading for " + edgeConnectorForKVSConfiguration.getKinesisVideoStreamName()
-                    + " has been interrupted, re-init component to restart the process.");
-            Constants.setFatalStatus(true);
+                + " has been interrupted, re-init camera to restart the process.");
+            edgeConnectorForKVSConfiguration.getFatalStatus().set(true);
         } finally {
             if (processLock.isHeldByCurrentThread()) processLock.unlock();
         }
@@ -539,14 +566,14 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
             videoRecorder.setAppDataOutputStream(outputStream);
 
             log.info("Connected streams for KVS Stream: " +
-                    edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
+                edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
             videoRecorder.toggleAppDataOutputStream(true);
 
             log.info("Turned on outputStream in recorder and start uploading!");
             Date dateNow = new Date();
             try {
                 videoUploader.uploadStream(inputStream, dateNow, new StatusChangedCallBack(),
-                        new UploadCallBack(dateNow, edgeConnectorForKVSConfiguration));
+                    new UploadCallBack(dateNow, edgeConnectorForKVSConfiguration));
             } catch (Exception exception) {
                 if (processLock.tryLock(INIT_LOCK_TIMEOUT_IN_SECONDS, TimeUnit.SECONDS)) {
                     log.error("Failed to upload stream: {}", exception.getMessage());
@@ -574,7 +601,9 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
                             bytesAvailable = inputStream.available();
                         }
                     } catch (IOException e) {
-                        log.error("Exception flush intputStream: " + e.getMessage());
+                        log.error("Exception flush inputStream: " + e.getMessage());
+                    } finally {
+                        if (processLock.isHeldByCurrentThread()) processLock.unlock();
                     }
                     log.info("InputStream is flushed");
 
@@ -582,8 +611,9 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
                     inputStream.close();
                 } else {
                     log.error("Restart uploading for " + edgeConnectorForKVSConfiguration.getKinesisVideoStreamName()
-                            + " timeout, re-init component to restart the process.");
-                    Constants.setFatalStatus(true);
+                        + " timeout, re-init camera to restart the process.");
+                    edgeConnectorForKVSConfiguration.getFatalStatus().set(true);
+                    if (processLock.isHeldByCurrentThread()) processLock.unlock();
                     break;
                 }
             }
@@ -591,21 +621,21 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
     }
 
     private void stopLiveVideoStreaming(EdgeConnectorForKVSConfiguration edgeConnectorForKVSConfiguration)
-            throws IOException {
+        throws IOException {
         ReentrantLock processLock = edgeConnectorForKVSConfiguration.getProcessLock();
         try {
             if (processLock.tryLock(
-                    INIT_LOCK_TIMEOUT_IN_SECONDS, TimeUnit.SECONDS)) {
+                INIT_LOCK_TIMEOUT_IN_SECONDS, TimeUnit.SECONDS)) {
                 log.info("Stop Live Video Streaming Called for " +
-                        edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
+                    edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
                 log.info("Calling function " + Constants.getCallingFunctionName(2));
 
                 // Stop video recording provided there's no scheduled / mqtt based live streaming in progress
                 edgeConnectorForKVSConfiguration.setLiveStreamingRequestsCount(
-                        edgeConnectorForKVSConfiguration.getLiveStreamingRequestsCount() - 1);
+                    edgeConnectorForKVSConfiguration.getLiveStreamingRequestsCount() - 1);
                 if (edgeConnectorForKVSConfiguration.getLiveStreamingRequestsCount() > 0) {
                     log.info("Live Streaming is being used by multiple tasks. Requests Count " +
-                            edgeConnectorForKVSConfiguration.getLiveStreamingRequestsCount());
+                        edgeConnectorForKVSConfiguration.getLiveStreamingRequestsCount());
                     return;
                 }
                 log.info("Live Steaming Requests Count is 0. Stopping.");
@@ -614,11 +644,11 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
                 VideoUploader videoUploader = edgeConnectorForKVSConfiguration.getVideoUploader();
 
                 log.info("Toggle output stream off for KVS Stream: " +
-                        edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
+                    edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
                 videoRecorder.toggleAppDataOutputStream(false);
 
                 log.info("Close video uploader for KVS Stream: " +
-                        edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
+                    edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
                 videoUploader.close();
 
                 // Manually flush input stream
@@ -630,13 +660,13 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
                 stopRecordingJob(edgeConnectorForKVSConfiguration);
             } else {
                 log.error("Stop uploading for " + edgeConnectorForKVSConfiguration.getKinesisVideoStreamName()
-                        + " timeout, re-init component to restart the process.");
-                Constants.setFatalStatus(true);
+                    + " timeout, re-init camera to restart the process.");
+                edgeConnectorForKVSConfiguration.getFatalStatus().set(true);
             }
         } catch (InterruptedException e) {
             log.error("Stop uploading for " + edgeConnectorForKVSConfiguration.getKinesisVideoStreamName()
-                    + " has been interrupted, re-init component to restart the process.");
-            Constants.setFatalStatus(true);
+                + " has been interrupted, re-init camera to restart the process.");
+            edgeConnectorForKVSConfiguration.getFatalStatus().set(true);
         } finally {
             if (processLock.isHeldByCurrentThread()) processLock.unlock();
         }
@@ -645,24 +675,26 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
     @Override
     public void schedulerStartTaskCallback(Constants.@NonNull JobType jobType, @NonNull String streamName) {
         log.info("Start Scheduled Task - " + jobType.name() + " Stream: " + streamName);
+        final EdgeConnectorForKVSConfiguration edgeConnectorForKVSConfiguration =
+            edgeConnectorForKVSConfigurationMap.get(streamName);
         if (jobType == Constants.JobType.LIVE_VIDEO_STREAMING) {
             liveStreamingExecutor.submit(() -> {
                 try {
-                    startLiveVideoStreaming(edgeConnectorForKVSConfigurationMap.get(streamName));
+                    startLiveVideoStreaming(edgeConnectorForKVSConfiguration);
                 } catch (Exception ex) {
                     log.error("Start Live Streaming Exception ({}): {}", ex.getClass().getName(),
-                            ex.getMessage());
-                    Constants.setFatalStatus(true);
+                        ex.getMessage());
+                    edgeConnectorForKVSConfiguration.getFatalStatus().set(true);
                 }
             });
         } else if (jobType == Constants.JobType.LOCAL_VIDEO_CAPTURE) {
             recorderService.submit(() -> {
                 try {
-                    startRecordingJob(edgeConnectorForKVSConfigurationMap.get(streamName));
+                    startRecordingJob(edgeConnectorForKVSConfiguration);
                 } catch (Exception ex) {
                     log.error("Start Recording Exception ({}): {}", ex.getClass().getName(),
-                            ex.getMessage());
-                    Constants.setFatalStatus(true);
+                        ex.getMessage());
+                    edgeConnectorForKVSConfiguration.getFatalStatus().set(true);
                 }
             });
         }
@@ -671,157 +703,237 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
     @Override
     public void schedulerStopTaskCallback(Constants.@NonNull JobType jobType, @NonNull String streamName) {
         log.info("Stop Scheduled Task - " + jobType.name() + " Stream: " + streamName);
+        final EdgeConnectorForKVSConfiguration edgeConnectorForKVSConfiguration =
+            edgeConnectorForKVSConfigurationMap.get(streamName);
         if (jobType == Constants.JobType.LIVE_VIDEO_STREAMING) {
             try {
-                stopLiveVideoStreaming(edgeConnectorForKVSConfigurationMap.get(streamName));
+                stopLiveVideoStreaming(edgeConnectorForKVSConfiguration);
             } catch (IOException ex) {
                 log.error("Exception on schedulerStopTaskCallback - stopLiveVideoStreaming: " + ex.getMessage());
-                Constants.setFatalStatus(true);
+                edgeConnectorForKVSConfiguration.getFatalStatus().set(true);
             }
         } else if (jobType == Constants.JobType.LOCAL_VIDEO_CAPTURE) {
-            stopRecordingJob(edgeConnectorForKVSConfigurationMap.get(streamName));
+            stopRecordingJob(edgeConnectorForKVSConfiguration);
         }
     }
 
-    private void initMQTTSubscription() {
-        edgeConnectorForKVSConfigurationList
-                .forEach(configuration -> {
-                    VideoUploadRequestEvent event = new VideoUploadRequestEvent() {
-                        @Override
-                        public void onStart(boolean isLive, long updateTimestamp, long startTime, long endTime) {
-                            if (isLive) {
-                                log.info("Received Live Streaming request for stream: "
-                                        + configuration.getKinesisVideoStreamName());
-                                ScheduledFuture<?> future = configuration.getStopLiveStreamingTaskFuture();
-                                if (future == null) {
-                                    // Kick-off Live Streaming for 5 mins
-                                    // do it only for the first request
-                                    log.info("Start Live Streaming");
-                                    liveStreamingExecutor.submit(() -> {
-                                        try {
-                                            startLiveVideoStreaming(configuration);
-                                        } catch (Exception ex) {
-                                            log.error("Error starting live video streaming." + ex.getMessage());
-                                            Constants.setFatalStatus(true);
-                                        }
-                                    });
-                                } else {
-                                    log.info("Live Streaming was already started. Continue Streaming.");
-                                    // Cancel the previously started scheduled task
-                                    // and restart the task below
-                                    future.cancel(false);
-                                }
-                                Runnable task = getStopLiveStreamingTask(configuration);
-                                future = stopLiveStreamingExecutor.schedule(task,
-                                        LIVE_STREAMING_STOP_TIMER_DELAY_IN_SECONDS, TimeUnit.SECONDS);
-                                configuration.setStopLiveStreamingTaskFuture(future);
-                                log.info("Schedule Live Streaming to stop after " +
-                                        LIVE_STREAMING_STOP_TIMER_DELAY_IN_SECONDS + "s for stream: " +
-                                        configuration.getKinesisVideoStreamName());
-                            } else {
-                                try {
-                                    startHistoricalVideoUploading(configuration, startTime, endTime);
-                                } catch (Exception ex) {
-                                    log.error("Error starting historical video uploading." + ex.getMessage());
-                                    Constants.setFatalStatus(true);
-                                }
-                            }
-                        }
+    private void initMQTTSubscription(EdgeConnectorForKVSConfiguration configuration) {
 
-                        @Override
-                        public void onError(String errMessage) {
-                            log.info("MQTT Error " + errMessage + " for stream "
-                                    + configuration.getKinesisVideoStreamName());
-                        }
-                    };
-                    if (configuration.getVideoUploadRequestMqttTopic() != null) {
-                        videoUploadRequestHandler.subscribeToMqttTopic(configuration.getVideoUploadRequestMqttTopic(),
-                                event);
+        VideoUploadRequestEvent event = new VideoUploadRequestEvent() {
+            @Override
+            public void onStart(boolean isLive, long updateTimestamp, long startTime, long endTime) {
+                if (isLive) {
+                    log.info("Received Live Streaming request for stream: "
+                        + configuration.getKinesisVideoStreamName());
+                    ScheduledFuture<?> future = configuration.getStopLiveStreamingTaskFuture();
+                    if (future == null) {
+                        // Kick-off Live Streaming for 5 mins
+                        // do it only for the first request
+                        log.info("Start Live Streaming");
+                        liveStreamingExecutor.submit(() -> {
+                            try {
+                                startLiveVideoStreaming(configuration);
+                            } catch (Exception ex) {
+                                log.error("Error starting live video streaming." + ex.getMessage());
+                                configuration.getFatalStatus().set(true);
+                            }
+                        });
+                    } else {
+                        log.info("Live Streaming was already started. Continue Streaming.");
+                        // Cancel the previously started scheduled task
+                        // and restart the task below
+                        future.cancel(false);
                     }
-                });
+                    Runnable task = getStopLiveStreamingTask(configuration);
+                    future = stopLiveStreamingExecutor.schedule(task,
+                        LIVE_STREAMING_STOP_TIMER_DELAY_IN_SECONDS, TimeUnit.SECONDS);
+                    configuration.setStopLiveStreamingTaskFuture(future);
+                    log.info("Schedule Live Streaming to stop after " +
+                        LIVE_STREAMING_STOP_TIMER_DELAY_IN_SECONDS + "s for stream: " +
+                        configuration.getKinesisVideoStreamName());
+                } else {
+                    try {
+                        startHistoricalVideoUploading(configuration, startTime, endTime);
+                    } catch (Exception ex) {
+                        log.error("Error starting historical video uploading." + ex.getMessage());
+                        configuration.getFatalStatus().set(true);
+                    }
+                }
+            }
+
+            @Override
+            public void onError(String errMessage) {
+                log.info("MQTT Error " + errMessage + " for stream "
+                    + configuration.getKinesisVideoStreamName());
+            }
+        };
+        if (configuration.getVideoUploadRequestMqttTopic() != null) {
+            videoUploadRequestHandler.subscribeToMqttTopic(configuration.getVideoUploadRequestMqttTopic(),
+                event);
+        }
     }
 
     private Runnable getStopLiveStreamingTask(EdgeConnectorForKVSConfiguration configuration) {
         return () -> {
             try {
                 log.info("Stop Live Streaming for stream " +
-                        configuration.getKinesisVideoStreamName() +
-                        ". Thread's name: " + Thread.currentThread().getName());
+                    configuration.getKinesisVideoStreamName() +
+                    ". Thread's name: " + Thread.currentThread().getName());
                 configuration.setStopLiveStreamingTaskFuture(null);
                 stopLiveVideoStreaming(configuration);
             } catch (Exception ex) {
                 log.error("Error stopping live video streaming." + ex.getMessage());
-                Constants.setFatalStatus(true);
+                configuration.getFatalStatus().set(true);
             }
         };
     }
 
-    public void cleanUpEdgeConnectorForKVSService() {
-        log.info("Edge connector for KVS service is cleaning up");
-
-        if (jobScheduler != null) {
-            jobScheduler.stop();
+    @Synchronized
+    public void cleanUpEdgeConnectorForKVSService(
+        EdgeConnectorForKVSConfiguration restartNeededConfiguration) {
+        // DeInit all cameras if camera level restart failed
+        if (restartNeededConfiguration == null) {
+            log.info("Edge connector for KVS service is cleaning up for all cameras");
+            jobScheduler.stopAllCameras();
+            edgeConnectorForKVSConfigurationList.forEach(configuration -> {
+                // Deinit video uploader
+                deInitVideoUploaders(configuration);
+                VideoRecorder videoRecorder = configuration.getVideoRecorder();
+                // Deinit video recorder if video recorder is not closed by deInitVideoUploaders
+                if (videoRecorder != null && !videoRecorder.getStatus().equals(RecorderStatus.STOPPED)) {
+                    // Unlock the processing lock so we can stop the recorder
+                    if (configuration.getProcessLock().isHeldByCurrentThread()) {
+                        configuration.getProcessLock().unlock();
+                    }
+                    deInitVideoRecorders(configuration);
+                }
+            });
+        } else {
+            log.info("Edge connector for KVS service is cleaning up for this camera: KVS stream: "
+                + restartNeededConfiguration.getKinesisVideoStreamName() + ", siteWise ID: "
+                + restartNeededConfiguration.getSiteWiseAssetId());
+            // Stop scheduler for failed cameras only
+            jobScheduler.stop(restartNeededConfiguration);
+            // Deinit video uploader
+            deInitVideoUploaders(restartNeededConfiguration);
+            // Deinit video recorder if video recorder is not closed by deInitVideoUploaders
+            VideoRecorder restartNeededVideoRecorder = restartNeededConfiguration.getVideoRecorder();
+            if (restartNeededVideoRecorder != null
+                && !restartNeededVideoRecorder.getStatus().equals(RecorderStatus.STOPPED)) {
+                // Unlock the processing lock so we can stop the recorder
+                if (restartNeededConfiguration.getProcessLock().isHeldByCurrentThread()) {
+                    restartNeededConfiguration.getProcessLock().unlock();
+                }
+                deInitVideoRecorders(restartNeededConfiguration);
+            }
         }
-
-        //TODO: Deinit MQTT subscriptions
-
-        // Deinit video uploader
-        deInitVideoUploaders();
-
-        // Deinit video recorder
-        deInitVideoRecorders();
-
-        // TODO: Deinit stream manager, scheduler, secret manager, config
 
         log.info("Edge connector for KVS service is cleaned up");
     }
 
-    private void deInitVideoRecorders() {
-        for (EdgeConnectorForKVSConfiguration configuration : edgeConnectorForKVSConfigurationList) {
-            stopRecordingJob(configuration);
+    private void deInitVideoRecorders(EdgeConnectorForKVSConfiguration restartNeededConfiguration) {
+        if (!restartNeededConfiguration.getVideoRecorder().getStatus().equals(RecorderStatus.STOPPED)) {
+            stopRecordingJob(restartNeededConfiguration);
         }
     }
 
-    private void deInitVideoUploaders() {
+    private void deInitVideoUploaders(EdgeConnectorForKVSConfiguration restartNeededConfiguration) {
+        try {
+            stopLiveVideoStreaming(restartNeededConfiguration);
+        } catch (IOException e) {
+            log.error("Exception when deInitVideoUploaders: " + e.getMessage());
+        }
+    }
+
+    private static void clearFatalStatus() {
         edgeConnectorForKVSConfigurationList.forEach(configuration -> {
-            try {
-                stopLiveVideoStreaming(configuration);
-            } catch (IOException e) {
-                log.error("Exception when deInitVideoUploaders: " + e.getMessage());
+            if (configuration.getFatalStatus().get()) {
+                configuration.getFatalStatus().set(false);
             }
         });
     }
 
     public static void main(String[] args) throws InterruptedException {
         log.info("---------- EdgeConnectorForKVS Starting ----------");
-        EdgeConnectorForKVSService edgeConnectorForKVSService;
-        Constants.setFatalStatus(false);
         boolean retry = true;
+        boolean isInitialSetup = true;
+        List<String> restartNeededConfigurationList = new ArrayList<>();
         do {
             hubSiteWiseAssetId = args[Constants.ARG_INDEX_SITE_WISE_ASSET_ID_FOR_HUB];
             log.info("EdgeConnectorForKVS Hub Asset Id: " + hubSiteWiseAssetId);
-            edgeConnectorForKVSService = new EdgeConnectorForKVSService();
+            final EdgeConnectorForKVSService edgeConnectorForKVSService = new EdgeConnectorForKVSService();
 
             try {
-                edgeConnectorForKVSService.setUpEdgeConnectorForKVSService();
-                // block main thread
-                while (!Constants.getFatalStatus()) {
+                // set up shared configurations first
+                if (isInitialSetup) {
+                    edgeConnectorForKVSService.setUpSharedEdgeConnectorForKVSService();
+                    restartNeededConfigurationList.addAll(edgeConnectorForKVSConfigurationList.stream()
+                        .map(EdgeConnectorForKVSConfiguration::getKinesisVideoStreamName)
+                        .collect(Collectors.toList()));
+                    isInitialSetup = false;
+                }
+                if (restartNeededConfigurationList == null || restartNeededConfigurationList.isEmpty()) {
+                    throw new EdgeConnectorForKVSUnrecoverableException("Unable to initialize component");
+                }
+
+                // initialize or re-init camera level configurations
+                edgeConnectorForKVSConfigurationList.forEach(configuration -> {
+                    if (restartNeededConfigurationList.contains(configuration.kinesisVideoStreamName)) {
+                        edgeConnectorForKVSService.setUpCameraLevelEdgeConnectorForKVSService(configuration);
+                    }
+                });
+
+                // clear this configuration list after each restart or initial setup
+                restartNeededConfigurationList.clear();
+                // block main thread and regularly check camera level health status
+                while (true) {
+                    for (EdgeConnectorForKVSConfiguration configuration : edgeConnectorForKVSConfigurationList) {
+                        if (configuration.getFatalStatus().get()) {
+                            log.info("fatal status found for " + configuration.getKinesisVideoStreamName());
+                            restartNeededConfigurationList.add(configuration.kinesisVideoStreamName);
+                        }
+                    }
+                    if (!restartNeededConfigurationList.isEmpty()) {
+                        //  fatal status was set, throw an exception to trigger restart
+                        throw new EdgeConnectorForKVSException("Fatal error reported");
+                    }
                     Thread.sleep(WAIT_TIME_BEFORE_POLLING_IN_MILLISECS);
                 }
-                //  fatal status was set, throw an exception to trigger restart
-                throw new EdgeConnectorForKVSException("Fatal error reported");
+            } catch (final EdgeConnectorForKVSException ex) {
+                log.error("Start kicking off camera level restart: " +
+                    "Failed {}: {}", ex.getClass().getName(), ex.getMessage());
+            } catch (final EdgeConnectorForKVSUnrecoverableException ex) {
+                log.error("Unrecoverable exception caught, please re-deploy or restart the Component." +
+                    "ERROR: Failed {}: {}", ex.getClass().getName(), ex.getMessage());
+                retry = false;
             } catch (final Exception ex) {
-                log.error("ERROR: Failed {}: {}", ex.getClass().getName(), ex.getMessage());
-                if (ex.getClass() == EdgeConnectorForKVSUnrecoverableException.class) {
-                    log.error("Please re-deploy or restart the Component");
-                    retry = false;
-                }
+                log.error("Uncaught exception found, please re-deploy or restart the Component." +
+                    "ERROR: Failed {}: {}", ex.getClass().getName(), ex.getMessage());
+                retry = false;
             }
-            Constants.setFatalStatus(false);
-            edgeConnectorForKVSService.cleanUpEdgeConnectorForKVSService();
+
+            // clear fatalStatus and clean up failed cameras
+            clearFatalStatus();
+            edgeConnectorForKVSConfigurationList.forEach(configuration -> {
+                if (restartNeededConfigurationList.contains(configuration.kinesisVideoStreamName)) {
+                    edgeConnectorForKVSService.cleanUpEdgeConnectorForKVSService(configuration);
+                }
+            });
+
             if (retry) {
-                log.info("---------- EdgeConnectorForKVS Re-starting ----------");
-                // wait for a bit before restarting
+                // If the fatalStatus is true after camera level restart, re-initializing the component
+                boolean isFatalStatusSet = edgeConnectorForKVSConfigurationList.stream()
+                    .anyMatch(configuration -> configuration.getFatalStatus().get());
+                if (isFatalStatusSet) {
+                    log.info("---------- Component Re-initializing ----------");
+                    edgeConnectorForKVSService.cleanUpEdgeConnectorForKVSService(null);
+                    restartNeededConfigurationList.clear();
+                    clearFatalStatus();
+                    isInitialSetup = true;
+                } else {
+                    log.info("---------- Camera Re-starting ----------");
+                    // wait for a bit before restarting
+                }
                 Thread.sleep(WAIT_TIME_BEFORE_RESTART_IN_MILLISECS);
             }
         } while (retry);

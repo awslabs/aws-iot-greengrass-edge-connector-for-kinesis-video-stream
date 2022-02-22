@@ -28,6 +28,7 @@ import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.nio.file.Path;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
 /***
@@ -58,6 +59,7 @@ public class EdgeConnectorForKVSConfiguration {
     public PipedOutputStream outputStream;
     public StreamManager streamManager;
     public ScheduledFuture<?> stopLiveStreamingTaskFuture;
+    public AtomicBoolean fatalStatus;
     // Thread lock for recorder and uploader thread
     public ReentrantLock processLock;
 

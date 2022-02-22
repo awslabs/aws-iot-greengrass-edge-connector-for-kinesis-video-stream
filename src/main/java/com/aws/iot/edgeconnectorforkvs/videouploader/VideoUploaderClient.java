@@ -239,6 +239,9 @@ public class VideoUploaderClient implements VideoUploader {
                 log.error(exception.getMessage());
             } catch (InterruptedException exception) {
                 log.error(exception.getMessage());
+            } catch (Exception exception) {
+                // It happens when input stream is not able to be closed
+                log.error("Unhandled exception caught: " + exception);
             }
         }
 

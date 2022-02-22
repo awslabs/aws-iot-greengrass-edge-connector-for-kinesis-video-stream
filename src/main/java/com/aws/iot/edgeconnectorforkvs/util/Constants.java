@@ -16,8 +16,6 @@
 
 package com.aws.iot.edgeconnectorforkvs.util;
 
-import lombok.Synchronized;
-
 public final class Constants {
 
 
@@ -80,19 +78,6 @@ public final class Constants {
     public static final String ENV_VAR_IOT_THING_NAME = "AWS_IOT_THING_NAME";
 
     public static final int ARG_INDEX_SITE_WISE_ASSET_ID_FOR_HUB = 0;
-
-    private static final Object SYNCLOCK = new Object[0];
-    private static boolean fatalStatus;
-
-    @Synchronized("SYNCLOCK")
-    public static boolean getFatalStatus() {
-        return fatalStatus;
-    }
-
-    @Synchronized("SYNCLOCK")
-    public static void setFatalStatus(boolean to) {
-        fatalStatus = to;
-    }
 
     // To be used for debugging
     public static String getCallingFunctionName(int lvl) {
