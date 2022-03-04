@@ -63,17 +63,17 @@ public class StartJob implements Job {
      */
     private void scheduleStopJob(Scheduler scheduler, Constants.JobType jobType, String streamName,
                                  long jobDurationInMins, SchedulerCallback schedulerCallback)
-            throws SchedulerException {
+        throws SchedulerException {
         long jobDurationInSecs = Duration.ofMinutes(jobDurationInMins).getSeconds();
         Instant stopTimeInstant = Instant.now().plusSeconds(jobDurationInSecs);
         Date stopTime = Date.from(stopTimeInstant);
         JobDetail jobDetail = newJob(StopJob.class)
-                .withIdentity(streamName, jobType.name() + Constants.JOB_ID_STOP_SUFFIX)
-                .build();
+            .withIdentity(streamName, jobType.name() + Constants.JOB_ID_STOP_SUFFIX)
+            .build();
         Trigger stopTrigger = newTrigger()
-                .withIdentity(streamName + "-" + jobDetail.getKey(), jobType.name())
-                .startAt(stopTime)
-                .build();
+            .withIdentity(streamName + "-" + jobDetail.getKey(), jobType.name())
+            .startAt(stopTime)
+            .build();
         JobDataMap jobDataMap = jobDetail.getJobDataMap();
         jobDataMap.put(JOB_STREAM_NAME_KEY, streamName);
         jobDataMap.put(JOB_TYPE_KEY, jobType);
@@ -93,7 +93,7 @@ public class StartJob implements Job {
      * @throws JobExecutionException if there is an exception while executing the job.
      */
     public void execute(JobExecutionContext context)
-            throws JobExecutionException {
+        throws JobExecutionException {
         JobKey jobKey = context.getJobDetail().getKey();
         JobDataMap jobDataMap = context.getJobDetail().getJobDataMap();
         String streamName = (String) jobDataMap.get(JOB_STREAM_NAME_KEY);
@@ -107,10 +107,10 @@ public class StartJob implements Job {
             scheduleStopJob(context.getScheduler(), jobType, streamName, jobDurationInMins, schedulerCallback);
         } catch (Exception ex) {
             final String errorMessage = String.format("Could not schedule stop job for Job Type: %s, " +
-                            "Stream Name: %s, Job Duration: %d mins. %s", jobType.name(), streamName,
-                    jobDurationInMins, ex.getMessage());
+                    "Stream Name: %s, Job Duration: %d mins. %s", jobType.name(), streamName,
+                jobDurationInMins, ex.getMessage());
             log.error(errorMessage);
-            Constants.setFatalStatus(true);
+            // After this exception is caught, it will start camera level restart
             throw new JobExecutionException(errorMessage, ex);
         }
         // Call the Controller callback function

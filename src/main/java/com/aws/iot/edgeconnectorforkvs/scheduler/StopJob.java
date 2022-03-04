@@ -66,9 +66,9 @@ public class StopJob implements Job {
             schedulerCallback.schedulerStopTaskCallback(jobType, streamName);
         } catch (Exception ex) {
             final String errorMessage = String.format("Exception on StopJob Execution. " +
-                            "Stream Name: %s, %s", streamName, ex.getMessage());
+                "Stream Name: %s, %s", streamName, ex.getMessage());
             log.error(errorMessage);
-            Constants.setFatalStatus(true);
+            // After this exception is caught, it will start camera level restart
             throw new JobExecutionException(errorMessage, ex);
         }
     }

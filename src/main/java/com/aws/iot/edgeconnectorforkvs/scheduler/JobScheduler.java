@@ -16,6 +16,7 @@
 
 package com.aws.iot.edgeconnectorforkvs.scheduler;
 
+import com.aws.iot.edgeconnectorforkvs.model.EdgeConnectorForKVSConfiguration;
 import com.aws.iot.edgeconnectorforkvs.model.exceptions.EdgeConnectorForKVSException;
 import com.aws.iot.edgeconnectorforkvs.util.Constants;
 import lombok.NonNull;
@@ -24,6 +25,7 @@ import org.quartz.CronExpression;
 import org.quartz.CronTrigger;
 import org.quartz.JobDataMap;
 import org.quartz.JobDetail;
+import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
 import org.quartz.SchedulerFactory;
@@ -88,9 +90,9 @@ public class JobScheduler {
             boolean valid = verifyCron(startTimeExpr, jobDurationInMins);
             if (!valid) {
                 final String errorMessage = String.format("Error: Invalid Start Time Expression and Job Duration." +
-                                "Job Type: %s, Stream Name: %s, StartTime Expr: %s, Job Duration: %d mins." +
-                                "Job not scheduled.", jobType.name(), streamName,
-                        startTimeExpr, jobDurationInMins);
+                        "Job Type: %s, Stream Name: %s, StartTime Expr: %s, Job Duration: %d mins." +
+                        "Job not scheduled.", jobType.name(), streamName,
+                    startTimeExpr, jobDurationInMins);
                 log.error(errorMessage);
                 throw new EdgeConnectorForKVSException(errorMessage);
             }
@@ -98,13 +100,11 @@ public class JobScheduler {
             sched = this.schedulerFactory.getScheduler();
             // seconds, minute, hour, day-of-month, month, day-of-week, year(optional)
             log.info("Start Job Cron Expression: " + startTimeExpr);
-            JobDetail jobDetail = newJob(StartJob.class)
-                    .withIdentity(streamName, jobType.name() + "_START")
-                    .build();
+            JobDetail jobDetail = produceJobDetails(streamName, jobType.name());
             CronTrigger startTrigger = newTrigger()
-                    .withIdentity(streamName + "-" + jobDetail.getKey(), jobType.name())
-                    .withSchedule(cronSchedule(startTimeExpr))
-                    .build();
+                .withIdentity(streamName + "-" + jobDetail.getKey(), jobType.name())
+                .withSchedule(cronSchedule(startTimeExpr))
+                .build();
             JobDataMap jobDataMap = jobDetail.getJobDataMap();
             jobDataMap.put(Constants.JOB_TYPE_KEY, jobType);
             jobDataMap.put(Constants.JOB_DURATION_IN_MINS_KEY, jobDurationInMins);
@@ -112,11 +112,11 @@ public class JobScheduler {
             jobDataMap.put(Constants.JOB_CALLBACK_INSTANCE, schedulerCallback);
             Date ft = sched.scheduleJob(jobDetail, startTrigger);
             log.info(jobDetail.getKey() + " has been scheduled to run at: " + ft + " and repeat based on expression: "
-                    + startTrigger.getCronExpression());
+                + startTrigger.getCronExpression());
         } catch (ParseException | SchedulerException ex) {
             final String errorMessage = String.format("Could not schedule job for Job Type: %s, Stream Name: %s, " +
-                            "StartTime Expr: %s, Job Duration: %d mins. %s", jobType.name(), streamName,
-                    startTimeExpr, jobDurationInMins, ex.getMessage());
+                    "StartTime Expr: %s, Job Duration: %d mins. %s", jobType.name(), streamName,
+                startTimeExpr, jobDurationInMins, ex.getMessage());
             log.error(errorMessage);
             throw new EdgeConnectorForKVSException(errorMessage, ex);
         }
@@ -180,17 +180,53 @@ public class JobScheduler {
     }
 
     /**
-     * Stops the Quartz Scheduler.
+     * Stops the Quartz Scheduler for all cameras
      */
-    public void stop() {
+    public void stopAllCameras() {
         try {
-            log.info("Shutting Down Scheduler");
+            log.info("Stopping job scheduler!");
             Scheduler sched = this.schedulerFactory.getScheduler();
+            log.info("Shutting Down Scheduler");
             sched.shutdown(true);
         } catch (SchedulerException ex) {
-            final String errorMessage = String.format("Error stopping JobScheduler: " + ex.getMessage());
+            final String errorMessage = String.format("Error stopping scheduler for all cameras: " + ex.getMessage());
             log.error(errorMessage);
             throw new EdgeConnectorForKVSException(errorMessage, ex);
         }
+    }
+
+    /**
+     * Stops the Quartz Scheduler for camera level
+     */
+    public void stop(EdgeConnectorForKVSConfiguration configuration) {
+        try {
+            Scheduler sched = this.schedulerFactory.getScheduler();
+            // Remove jobs for failed camera
+            String kvsStreamName = configuration.getKinesisVideoStreamName();
+            JobDetail recorderJobDetail = produceJobDetails(
+                kvsStreamName, Constants.JobType.LOCAL_VIDEO_CAPTURE.name());
+            JobDetail uploaderJobDetail = produceJobDetails(
+                kvsStreamName, Constants.JobType.LIVE_VIDEO_STREAMING.name());
+            JobKey recorderJobKey = recorderJobDetail.getKey();
+            JobKey uploaderJobKey = uploaderJobDetail.getKey();
+            if (sched.checkExists(recorderJobKey)) {
+                sched.deleteJob(recorderJobKey);
+                log.info("Removing recorder job from scheduler for " + recorderJobKey);
+            }
+            if (sched.checkExists(uploaderJobKey)) {
+                sched.deleteJob(uploaderJobKey);
+                log.info("Removing uploader job from scheduler for " + uploaderJobKey);
+            }
+        } catch (SchedulerException ex) {
+            final String errorMessage = String.format("Error stopping scheduler for single camera: " + ex.getMessage());
+            log.error(errorMessage);
+            throw new EdgeConnectorForKVSException(errorMessage, ex);
+        }
+    }
+
+    private JobDetail produceJobDetails(String kvsStreamName, String jobType) {
+        return newJob(StartJob.class)
+            .withIdentity(kvsStreamName, jobType + "_START")
+            .build();
     }
 }

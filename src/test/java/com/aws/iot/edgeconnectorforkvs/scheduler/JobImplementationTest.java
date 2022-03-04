@@ -17,7 +17,6 @@
 package com.aws.iot.edgeconnectorforkvs.scheduler;
 
 import com.aws.iot.edgeconnectorforkvs.util.Constants;
-import lombok.NonNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -56,6 +55,8 @@ public class JobImplementationTest {
     private JobDetail jobDetail;
     @Mock
     private Scheduler scheduler;
+    @Mock
+    private SchedulerCallback callbackClass;
 
     private JobDataMap jobDataMap;
     private static final String JOB_NAME = "test-job";
@@ -63,25 +64,11 @@ public class JobImplementationTest {
     private static final String JOB_STREAM_NAME = "test-video-stream";
     private static final long JOB_DURATION_IN_MINS = 10;
 
-    static class CallbackClass implements SchedulerCallback {
-
-        @Override
-        public void schedulerStartTaskCallback(Constants.@NonNull JobType jobType, @NonNull String streamName) {
-
-        }
-
-        @Override
-        public void schedulerStopTaskCallback(Constants.@NonNull JobType jobType, @NonNull String streamName) {
-
-        }
-    }
-
     @BeforeEach
     public void setup() {
         startJob = new StartJob();
         stopJob = new StopJob();
         jobDataMap = new JobDataMap();
-        CallbackClass callbackClass = new CallbackClass();
         jobDataMap.put(JOB_TYPE_KEY, Constants.JobType.LOCAL_VIDEO_CAPTURE);
         jobDataMap.put(JOB_DURATION_IN_MINS_KEY, JOB_DURATION_IN_MINS);
         jobDataMap.put(JOB_STREAM_NAME_KEY, JOB_STREAM_NAME);
@@ -120,4 +107,17 @@ public class JobImplementationTest {
         verify(jobDetail).getKey();
     }
 
+    @Test
+    public void stopJob_execute_throwException() throws JobExecutionException {
+        // mock
+        JobKey jobKey = JobKey.jobKey(JOB_NAME, JOB_GROUP);
+        jobDataMap.put(JOB_CALLBACK_INSTANCE, callbackClass);
+
+        // when
+        when(jobDetail.getKey()).thenReturn(jobKey);
+        doThrow(RuntimeException.class).when(callbackClass).schedulerStopTaskCallback(any(), any());
+
+        // verify
+        assertThrows(JobExecutionException.class, () -> stopJob.execute(jobExecutionContext));
+    }
 }
