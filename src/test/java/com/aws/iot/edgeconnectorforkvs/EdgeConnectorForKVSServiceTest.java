@@ -285,6 +285,7 @@ public class EdgeConnectorForKVSServiceTest {
         edgeConnectorForKVSService.setUpCameraLevelEdgeConnectorForKVSService(edgeConnectorForKVSConfiguration);
 
         //verify
+        Thread.sleep(3000);
         assertEquals(0, edgeConnectorForKVSConfiguration.getRecordingRequestsCount());
         assertEquals(true, edgeConnectorForKVSConfiguration.getFatalStatus().get());
     }
