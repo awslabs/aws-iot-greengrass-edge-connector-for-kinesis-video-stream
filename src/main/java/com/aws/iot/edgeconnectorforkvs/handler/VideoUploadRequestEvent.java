@@ -16,10 +16,22 @@
 
 package com.aws.iot.edgeconnectorforkvs.handler;
 
+import com.aws.iot.edgeconnectorforkvs.model.EdgeConnectorForKVSConfiguration;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
+
 /**
  * Interface used for parameterized callback.
  */
 public interface VideoUploadRequestEvent {
-    void onStart(boolean isLive, long eventTimestamp, long startTime, long endTime);
-    void onError(String errMessage);
+    void onStart(boolean isLive,
+                 long eventTimestamp,
+                 long startTime,
+                 long endTime,
+                 EdgeConnectorForKVSConfiguration configuration,
+                 ExecutorService recorderService,
+                 ExecutorService liveStreamingExecutor,
+                 ScheduledExecutorService stopLiveStreamingExecutor);
+    void onError(String errMessage, EdgeConnectorForKVSConfiguration configuration);
 }

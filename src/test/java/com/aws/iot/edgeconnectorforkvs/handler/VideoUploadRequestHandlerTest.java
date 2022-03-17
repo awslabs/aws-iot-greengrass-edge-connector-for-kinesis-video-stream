@@ -16,6 +16,7 @@
 
 package com.aws.iot.edgeconnectorforkvs.handler;
 
+import com.aws.iot.edgeconnectorforkvs.model.EdgeConnectorForKVSConfiguration;
 import com.aws.iot.edgeconnectorforkvs.model.exceptions.EdgeConnectorForKVSException;
 import com.aws.iot.edgeconnectorforkvs.util.IPCUtils;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +39,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -61,6 +64,14 @@ public class VideoUploadRequestHandlerTest {
     private CompletableFuture<SubscribeToIoTCoreResponse> responseCompletableFuture;
     @Mock
     private VideoUploadRequestEvent videoUploadRequestEvent;
+    @Mock
+    EdgeConnectorForKVSConfiguration configuration;
+    @Mock
+    private ExecutorService recorderService;
+    @Mock
+    private ExecutorService liveStreamingExecutor;
+    @Mock
+    private ScheduledExecutorService stopLiveStreamingExecutor;
 
     private VideoUploadRequestHandler videoUploadRequestHandler;
 
@@ -181,8 +192,20 @@ public class VideoUploadRequestHandlerTest {
             return subscribeToIoTCoreResponseHandler;
         }).when(greengrassCoreIPCClient)
                 .subscribeToIoTCore(any(), any());
-        videoUploadRequestHandler.subscribeToMqttTopic(MQTT_TOPIC_NAME, videoUploadRequestEvent);
-        verify(videoUploadRequestEvent).onStart(IS_LIVE_FALSE, EVENT_TIMESTAMP, START_TIME, END_TIME);
+        videoUploadRequestHandler.subscribeToMqttTopic(MQTT_TOPIC_NAME,
+                videoUploadRequestEvent,
+                configuration,
+                recorderService,
+                liveStreamingExecutor,
+                stopLiveStreamingExecutor);
+        verify(videoUploadRequestEvent).onStart(IS_LIVE_FALSE,
+                EVENT_TIMESTAMP,
+                START_TIME,
+                END_TIME,
+                configuration,
+                recorderService,
+                liveStreamingExecutor,
+                stopLiveStreamingExecutor);
     }
 
     @Test
@@ -202,8 +225,20 @@ public class VideoUploadRequestHandlerTest {
             return subscribeToIoTCoreResponseHandler;
         }).when(greengrassCoreIPCClient)
                 .subscribeToIoTCore(any(), any());
-        videoUploadRequestHandler.subscribeToMqttTopic(MQTT_TOPIC_NAME, videoUploadRequestEvent);
-        verify(videoUploadRequestEvent).onStart(IS_LIVE_TRUE, EVENT_TIMESTAMP, 0, 0);
+        videoUploadRequestHandler.subscribeToMqttTopic(MQTT_TOPIC_NAME,
+                videoUploadRequestEvent,
+                configuration,
+                recorderService,
+                liveStreamingExecutor,
+                stopLiveStreamingExecutor);
+        verify(videoUploadRequestEvent).onStart(IS_LIVE_TRUE,
+                EVENT_TIMESTAMP,
+                0,
+                0,
+                configuration,
+                recorderService,
+                liveStreamingExecutor,
+                stopLiveStreamingExecutor);
     }
 
     @Test
@@ -220,8 +255,20 @@ public class VideoUploadRequestHandlerTest {
             return subscribeToIoTCoreResponseHandler;
         }).when(greengrassCoreIPCClient)
                 .subscribeToIoTCore(any(), any());
-        videoUploadRequestHandler.subscribeToMqttTopic(MQTT_TOPIC_NAME, videoUploadRequestEvent);
-        verify(videoUploadRequestEvent, never()).onStart(IS_LIVE_TRUE, EVENT_TIMESTAMP, START_TIME, END_TIME);
+        videoUploadRequestHandler.subscribeToMqttTopic(MQTT_TOPIC_NAME,
+                videoUploadRequestEvent,
+                configuration,
+                recorderService,
+                liveStreamingExecutor,
+                stopLiveStreamingExecutor);
+        verify(videoUploadRequestEvent, never()).onStart(IS_LIVE_TRUE,
+                EVENT_TIMESTAMP,
+                START_TIME,
+                END_TIME,
+                configuration,
+                recorderService,
+                liveStreamingExecutor,
+                stopLiveStreamingExecutor);
     }
 
     @Test
@@ -242,8 +289,20 @@ public class VideoUploadRequestHandlerTest {
             return subscribeToIoTCoreResponseHandler;
         }).when(greengrassCoreIPCClient)
                 .subscribeToIoTCore(any(), any());
-        videoUploadRequestHandler.subscribeToMqttTopic(MQTT_TOPIC_NAME, videoUploadRequestEvent);
-        verify(videoUploadRequestEvent, never()).onStart(IS_LIVE_TRUE, EVENT_TIMESTAMP, START_TIME, END_TIME);
+        videoUploadRequestHandler.subscribeToMqttTopic(MQTT_TOPIC_NAME,
+                videoUploadRequestEvent,
+                configuration,
+                recorderService,
+                liveStreamingExecutor,
+                stopLiveStreamingExecutor);
+        verify(videoUploadRequestEvent, never()).onStart(IS_LIVE_TRUE,
+                EVENT_TIMESTAMP,
+                START_TIME,
+                END_TIME,
+                configuration,
+                recorderService,
+                liveStreamingExecutor,
+                stopLiveStreamingExecutor);
     }
 
     @Test
@@ -264,8 +323,20 @@ public class VideoUploadRequestHandlerTest {
             return subscribeToIoTCoreResponseHandler;
         }).when(greengrassCoreIPCClient)
                 .subscribeToIoTCore(any(), any());
-        videoUploadRequestHandler.subscribeToMqttTopic(MQTT_TOPIC_NAME, videoUploadRequestEvent);
-        verify(videoUploadRequestEvent, never()).onStart(IS_LIVE_TRUE, EVENT_TIMESTAMP, START_TIME, END_TIME);
+        videoUploadRequestHandler.subscribeToMqttTopic(MQTT_TOPIC_NAME,
+                videoUploadRequestEvent,
+                configuration,
+                recorderService,
+                liveStreamingExecutor,
+                stopLiveStreamingExecutor);
+        verify(videoUploadRequestEvent, never()).onStart(IS_LIVE_TRUE,
+                EVENT_TIMESTAMP,
+                START_TIME,
+                END_TIME,
+                configuration,
+                recorderService,
+                liveStreamingExecutor,
+                stopLiveStreamingExecutor);
     }
 
     @Test
@@ -286,8 +357,20 @@ public class VideoUploadRequestHandlerTest {
             return subscribeToIoTCoreResponseHandler;
         }).when(greengrassCoreIPCClient)
                 .subscribeToIoTCore(any(), any());
-        videoUploadRequestHandler.subscribeToMqttTopic(MQTT_TOPIC_NAME, videoUploadRequestEvent);
-        verify(videoUploadRequestEvent, never()).onStart(IS_LIVE_TRUE, EVENT_TIMESTAMP, START_TIME, END_TIME);
+        videoUploadRequestHandler.subscribeToMqttTopic(MQTT_TOPIC_NAME,
+                videoUploadRequestEvent,
+                configuration,
+                recorderService,
+                liveStreamingExecutor,
+                stopLiveStreamingExecutor);
+        verify(videoUploadRequestEvent, never()).onStart(IS_LIVE_TRUE,
+                EVENT_TIMESTAMP,
+                START_TIME,
+                END_TIME,
+                configuration,
+                recorderService,
+                liveStreamingExecutor,
+                stopLiveStreamingExecutor);
     }
 
     @Test
@@ -301,8 +384,21 @@ public class VideoUploadRequestHandlerTest {
             return subscribeToIoTCoreResponseHandler;
         }).when(greengrassCoreIPCClient)
                 .subscribeToIoTCore(any(), any());
-        videoUploadRequestHandler.subscribeToMqttTopic(MQTT_TOPIC_NAME, videoUploadRequestEvent);
-        verify(videoUploadRequestEvent).onError(ERR_MSG);
+        videoUploadRequestHandler.subscribeToMqttTopic(MQTT_TOPIC_NAME,
+                videoUploadRequestEvent,
+                configuration,
+                recorderService,
+                liveStreamingExecutor,
+                stopLiveStreamingExecutor);
+        verify(videoUploadRequestEvent, never()).onStart(IS_LIVE_TRUE,
+                EVENT_TIMESTAMP,
+                START_TIME,
+                END_TIME,
+                configuration,
+                recorderService,
+                liveStreamingExecutor,
+                stopLiveStreamingExecutor);
+        verify(videoUploadRequestEvent).onError(ERR_MSG, configuration);
     }
 
     @Test
@@ -317,7 +413,12 @@ public class VideoUploadRequestHandlerTest {
         }).when(greengrassCoreIPCClient)
                 .subscribeToIoTCore(any(), any());
 
-        videoUploadRequestHandler.subscribeToMqttTopic(MQTT_TOPIC_NAME, videoUploadRequestEvent);
+        videoUploadRequestHandler.subscribeToMqttTopic(MQTT_TOPIC_NAME,
+                videoUploadRequestEvent,
+                configuration,
+                recorderService,
+                liveStreamingExecutor,
+                stopLiveStreamingExecutor);
     }
 
     @Test
@@ -328,7 +429,12 @@ public class VideoUploadRequestHandlerTest {
         when(greengrassCoreIPCClient.subscribeToIoTCore(any(), any())).thenReturn(subscribeToIoTCoreResponseHandler);
 
         assertThrows(EdgeConnectorForKVSException.class, () -> videoUploadRequestHandler
-                .subscribeToMqttTopic(MQTT_TOPIC_NAME, videoUploadRequestEvent));
+                .subscribeToMqttTopic(MQTT_TOPIC_NAME,
+                        videoUploadRequestEvent,
+                        configuration,
+                        recorderService,
+                        liveStreamingExecutor,
+                        stopLiveStreamingExecutor));
     }
 
     @Test
@@ -339,7 +445,12 @@ public class VideoUploadRequestHandlerTest {
         when(greengrassCoreIPCClient.subscribeToIoTCore(any(), any())).thenReturn(subscribeToIoTCoreResponseHandler);
 
         assertThrows(EdgeConnectorForKVSException.class, () -> videoUploadRequestHandler
-                .subscribeToMqttTopic(MQTT_TOPIC_NAME, videoUploadRequestEvent));
+                .subscribeToMqttTopic(MQTT_TOPIC_NAME,
+                        videoUploadRequestEvent,
+                        configuration,
+                        recorderService,
+                        liveStreamingExecutor,
+                        stopLiveStreamingExecutor));
     }
 
     @Test
@@ -369,5 +480,4 @@ public class VideoUploadRequestHandlerTest {
             });
         }
     }
-
 }

@@ -19,6 +19,7 @@ package com.aws.iot.edgeconnectorforkvs.model;
 import com.aws.iot.edgeconnectorforkvs.dataaccessor.StreamManager;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.VideoRecorder;
 import com.aws.iot.edgeconnectorforkvs.videouploader.VideoUploader;
+import com.aws.iot.edgeconnectorforkvs.videouploader.VideoUploaderClient;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.Synchronized;
@@ -54,6 +55,7 @@ public class EdgeConnectorForKVSConfiguration {
     public String cachedVideoAgeOutOnEdgePropertyId;
     public Path videoRecordFolderPath;
     public VideoUploader videoUploader;
+    public VideoUploaderClient.VideoUploaderClientBuilder videoUploaderClientBuilder;
     public VideoRecorder videoRecorder;
     public PipedInputStream inputStream;
     public PipedOutputStream outputStream;
