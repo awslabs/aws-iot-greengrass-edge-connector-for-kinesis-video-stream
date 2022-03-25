@@ -860,6 +860,8 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
         List<String> restartNeededConfigurationList = new ArrayList<>();
         do {
             hubSiteWiseAssetId = args[Constants.ARG_INDEX_SITE_WISE_ASSET_ID_FOR_HUB];
+            // For windows, we need to remove leading quote and trailing quote
+            hubSiteWiseAssetId = hubSiteWiseAssetId.replaceAll("'", "");
             log.info("EdgeConnectorForKVS Hub Asset Id: " + hubSiteWiseAssetId);
             final EdgeConnectorForKVSService edgeConnectorForKVSService = new EdgeConnectorForKVSService();
 
