@@ -16,6 +16,7 @@
 
 package com.aws.iot.edgeconnectorforkvs.handler;
 
+import com.aws.iot.edgeconnectorforkvs.model.EdgeConnectorForKVSConfiguration;
 import com.aws.iot.edgeconnectorforkvs.model.VideoUploadRequestMessage;
 import com.aws.iot.edgeconnectorforkvs.model.exceptions.EdgeConnectorForKVSException;
 import com.aws.iot.edgeconnectorforkvs.util.IPCUtils;
@@ -36,6 +37,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
 
 import static com.aws.iot.edgeconnectorforkvs.util.Constants.MQTT_LIVE_VIDEO_UPLOAD_REQUEST_KEY;
 
@@ -87,7 +90,12 @@ public class VideoUploadRequestHandler {
      * @param mqttTopic - Name of the MQTT topic where video upload request will be sent
      * @param event     - Callback event for onStart or onError
      */
-    public void subscribeToMqttTopic(String mqttTopic, VideoUploadRequestEvent event) {
+    public void subscribeToMqttTopic(String mqttTopic,
+                                     VideoUploadRequestEvent event,
+                                     EdgeConnectorForKVSConfiguration configuration,
+                                     ExecutorService recorderService,
+                                     ExecutorService liveStreamingExecutor,
+                                     ScheduledExecutorService stopLiveStreamingExecutor) {
         StreamResponseHandler<IoTCoreMessage> streamResponseHandler;
         streamResponseHandler = new StreamResponseHandler<IoTCoreMessage>() {
             @Override
@@ -130,7 +138,8 @@ public class VideoUploadRequestHandler {
                             log.error("Invalid VideoUploadRequest Event Received. Single hyphen required");
                         }
                     }
-                    event.onStart(isLive, propertyUpdateTimestamp, startTimestamp, endTimestamp);
+                    event.onStart(isLive, propertyUpdateTimestamp, startTimestamp, endTimestamp,
+                            configuration, recorderService, liveStreamingExecutor, stopLiveStreamingExecutor);
                 } else {
                     log.error("Invalid VideoUploadRequest Event Received. Single value required");
                 }
@@ -139,7 +148,7 @@ public class VideoUploadRequestHandler {
             @Override
             public boolean onStreamError(Throwable throwable) {
                 log.info("onStream Error: " + throwable.getMessage());
-                event.onError(throwable.getMessage());
+                event.onError(throwable.getMessage(), configuration);
                 // Handle error.
                 return false;
             }

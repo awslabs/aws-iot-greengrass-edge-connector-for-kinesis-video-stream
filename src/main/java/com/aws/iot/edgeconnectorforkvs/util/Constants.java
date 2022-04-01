@@ -56,6 +56,7 @@ public final class Constants {
     public static final int MAX_TIME_GAP_FOR_BACKFILL_SITEWISE_TIMESTAMP_IN_MINUTES = 6 * 24 * 60;
     public static final String WORK_DIR_ROOT_PATH = "./";
     public static final String PATH_DELIMITER = "/";
+    public static final String VIDEO_FILENAME_PREFIX_WITH_OUT_UNDERLINE = "video";
     public static final String VIDEO_FILENAME_PREFIX = "video_";
     public static final String VIDEO_FILENAME_POSTFIX = ".mkv";
     public static final String VIDEO_FILENAME_UPLOADED_POSTFIX = "_uploaded.mkv";
