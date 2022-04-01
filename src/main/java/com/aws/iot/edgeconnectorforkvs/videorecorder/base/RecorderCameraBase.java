@@ -45,6 +45,16 @@ public abstract class RecorderCameraBase {
     public abstract void setProperty(String property, Object data) throws IllegalArgumentException;
 
     /**
+     * Notification for the camera when binding, subclass can ovrrride it.
+     */
+    public void onBind() {}
+
+    /**
+     * Notification for the camera when unbinding, subclass can ovrrride it.
+     */
+    public void onUnbind() {}
+
+    /**
      * The listener is used to notify recorder module of camera capability after playing.
      */
     public interface CapabilityListener {

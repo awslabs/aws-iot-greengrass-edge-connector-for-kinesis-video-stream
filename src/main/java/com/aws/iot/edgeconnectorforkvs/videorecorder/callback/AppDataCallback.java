@@ -16,12 +16,11 @@
 
 package com.aws.iot.edgeconnectorforkvs.videorecorder.callback;
 
+import java.nio.ByteBuffer;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.VideoRecorder;
 
-import java.nio.ByteBuffer;
-
 /**
- * Basic Streaming Notification Callback.
+ * Streaming Notification Callback.
  */
 public interface AppDataCallback {
     /**

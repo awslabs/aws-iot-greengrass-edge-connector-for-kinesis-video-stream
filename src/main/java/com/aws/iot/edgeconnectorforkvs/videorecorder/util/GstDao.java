@@ -16,6 +16,7 @@
 
 package com.aws.iot.edgeconnectorforkvs.videorecorder.util;
 
+import java.util.Set;
 import com.sun.jna.Pointer;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.freedesktop.gstreamer.Bus;
@@ -28,6 +29,7 @@ import org.freedesktop.gstreamer.Pad;
 import org.freedesktop.gstreamer.PadLinkException;
 import org.freedesktop.gstreamer.PadProbeType;
 import org.freedesktop.gstreamer.Pipeline;
+import org.freedesktop.gstreamer.State;
 import org.freedesktop.gstreamer.StateChangeReturn;
 import org.freedesktop.gstreamer.Structure;
 import org.freedesktop.gstreamer.Version;
@@ -150,6 +152,15 @@ public class GstDao {
     }
 
     /**
+     * Unlink elements.
+     *
+     * @param elements elements
+     */
+    public void unlinkElements(Element... elements) {
+        Element.unlinkMany(elements);
+    }
+
+    /**
      * Set element status to playing.
      *
      * @param elm element
@@ -166,7 +177,10 @@ public class GstDao {
      * @return true if success
      */
     public StateChangeReturn stopElement(@NonNull Element elm) {
-        return elm.stop();
+        while (elm.getState() != State.NULL) {
+            elm.stop();
+        }
+        return StateChangeReturn.SUCCESS;
     }
 
     /**
@@ -177,6 +191,16 @@ public class GstDao {
      */
     public boolean syncElementParentState(@NonNull Element elm) {
         return elm.syncStateWithParent();
+    }
+
+    /**
+     * Get element status.
+     *
+     * @param elm element
+     * @return state
+     */
+    public State getElementState(@NonNull Element elm) {
+        return elm.getState();
     }
 
     /**
@@ -228,6 +252,16 @@ public class GstDao {
      */
     public void addPipelineElements(@NonNull Pipeline p, Element... elements) {
         p.addMany(elements);
+    }
+
+    /**
+     * Remove elements from pipeline.
+     *
+     * @param p pipeline
+     * @param elements elements
+     */
+    public void removePipelineElements(@NonNull Pipeline p, Element... elements) {
+        p.removeMany(elements);
     }
 
     /**
@@ -290,6 +324,17 @@ public class GstDao {
      * @param callback callback
      */
     public void addPadProbe(@NonNull Pad p, PadProbeType mask, PROBE callback) {
+        p.addProbe(mask, callback);
+    }
+
+    /**
+     * Add probe to a pad.
+     *
+     * @param p pad
+     * @param mask probe type
+     * @param callback callback
+     */
+    public void addPadProbe(@NonNull Pad p, Set<PadProbeType> mask, PROBE callback) {
         p.addProbe(mask, callback);
     }
 
@@ -388,6 +433,36 @@ public class GstDao {
     }
 
     /**
+     * Remove listener.
+     *
+     * @param b bus
+     * @param listener listener
+     */
+    public void disconnectBus(@NonNull Bus b, Bus.ERROR listener) {
+        b.disconnect(listener);
+    }
+
+    /**
+     * Remove listener.
+     *
+     * @param b bus
+     * @param listener listener
+     */
+    public void disconnectBus(@NonNull Bus b, Bus.WARNING listener) {
+        b.disconnect(listener);
+    }
+
+    /**
+     * Remove listener.
+     *
+     * @param b bus
+     * @param listener listener
+     */
+    public void disconnectBus(@NonNull Bus b, Bus.EOS listener) {
+        b.disconnect(listener);
+    }
+
+    /**
      * Add listener.
      *
      * @param appSink app sink
@@ -426,6 +501,15 @@ public class GstDao {
         return GLibUtilAPI.GLIB_API.g_strdup(str);
     }
 
+    /**
+     * Dispose this object.
+     *
+     * @param obj GstObject to be disposed
+     */
+    public void disposeGstObject(@NonNull GstObject obj) {
+        obj.dispose();
+    }
+
     Version getRequestVersion() {
         return new Version(Config.GST_VER_MAJOR, Config.GST_VER_MINOR, Config.GST_VER_MICRO,
                 Config.GST_VER_NANO);
@@ -435,12 +519,12 @@ public class GstDao {
         return Gst.getVersion();
     }
 
-    Version getSatisfyVersion(Version requested, Version local) {
+    Version getSatisfyVersion(Version requested, Version local) throws RuntimeException {
         if (!local.checkSatisfies(requested)) {
-            String msg = "The requested version of GStreamer is not available. "
-                    + String.format("Requested : %s, Available : %s ", requested, local);
-            log.warn(msg);
-            requested = local;
+            String msg = "The minimum required version of GStreamer is not satisfied. " + String
+                    .format("Minimum required : %s, Current available : %s", requested, local);
+            log.error(msg);
+            throw new RuntimeException(msg);
         }
 
         return requested;

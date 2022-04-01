@@ -107,7 +107,7 @@ public class RecordingControllerTest {
         VideoRecorder videoRecorder = mock(VideoRecorder.class);
         Pipeline pipeline = mock(Pipeline.class);
         when(videoRecorder.getStatus()).thenReturn(RecorderStatus.STARTED).thenReturn(RecorderStatus.STOPPED);
-        doNothing().when(videoRecorder).stopRecording();
+        doNothing().when(videoRecorder).stop();
         when(videoRecorder.getPipeline()).thenReturn(pipeline);
         doNothing().when(pipeline).close();
 
@@ -156,7 +156,7 @@ public class RecordingControllerTest {
         VideoRecorder videoRecorder = mock(VideoRecorder.class);
         Pipeline pipeline = mock(Pipeline.class);
         when(videoRecorder.getStatus()).thenReturn(RecorderStatus.STARTED);
-        doNothing().when(videoRecorder).stopRecording();
+        doNothing().when(videoRecorder).stop();
         when(videoRecorder.getPipeline()).thenReturn(pipeline);
         doNothing().when(pipeline).close();
         RecordingController.setRestartSleepTime(0);

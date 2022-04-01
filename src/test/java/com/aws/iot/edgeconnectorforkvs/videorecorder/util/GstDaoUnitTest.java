@@ -19,6 +19,8 @@ package com.aws.iot.edgeconnectorforkvs.videorecorder.util;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 import static org.mockito.BDDMockito.*;
+import java.util.HashSet;
+import java.util.Set;
 import org.freedesktop.gstreamer.Bus;
 import org.freedesktop.gstreamer.Caps;
 import org.freedesktop.gstreamer.Element;
@@ -28,6 +30,7 @@ import org.freedesktop.gstreamer.Gst;
 import org.freedesktop.gstreamer.Pad;
 import org.freedesktop.gstreamer.PadProbeType;
 import org.freedesktop.gstreamer.Pipeline;
+import org.freedesktop.gstreamer.State;
 import org.freedesktop.gstreamer.StateChangeReturn;
 import org.freedesktop.gstreamer.Structure;
 import org.freedesktop.gstreamer.Version;
@@ -112,6 +115,15 @@ public class GstDaoUnitTest {
             Assertions.assertTrue(mockGst.linkManyElement(mockElm, mockElm));
         }
 
+        // Test: unlink Elements
+        try (MockedStatic<Element> mockElementStatic = mockStatic(Element.class)) {
+            // Mocking
+            //mockElementStatic.when(() -> Element.unlinkMany(any(Element.class), any(Element.class))).thenAnswer(() -> null);
+
+            // Mocked behavior
+            Assertions.assertDoesNotThrow(() -> mockGst.unlinkElements(mockElm, mockElm));
+        }
+
         // Test: GLib
         try (MockedStatic<GNative> mockGLibStatic = mockStatic(GNative.class)) {
             mockGLibStatic.when(() -> GNative.loadLibrary(any(), any(), any()))
@@ -155,7 +167,6 @@ public class GstDaoUnitTest {
         willReturn(mockPad).given(mockElm).getRequestPad(anyString());
         willReturn(mockPad).given(mockElm).getStaticPad(anyString());
         willReturn(StateChangeReturn.SUCCESS).given(mockElm).play();
-        willReturn(StateChangeReturn.SUCCESS).given(mockElm).stop();
         willReturn(true).given(mockElm).sendEvent(any());
         willReturn(true).given(mockElm).syncStateWithParent();
         // Pipeline
@@ -177,7 +188,7 @@ public class GstDaoUnitTest {
         willReturn(true).given(mockVersion).checkSatisfies(any(Version.class));
         Assertions.assertEquals(mockVersion, mockGst.getSatisfyVersion(mockVersion, mockVersion));
         willReturn(false).given(mockVersion).checkSatisfies(any(Version.class));
-        Assertions.assertEquals(mockVersion, mockGst.getSatisfyVersion(mockVersion, mockVersion));
+        Assertions.assertThrows(RuntimeException.class, () -> mockGst.getSatisfyVersion(mockVersion, mockVersion));
 
         Assertions.assertDoesNotThrow(() -> mockGst.initContext());
 
@@ -221,19 +232,32 @@ public class GstDaoUnitTest {
         Assertions.assertThrows(NullPointerException.class,
                 () -> mockGst.syncElementParentState(null));
 
-        Assertions.assertEquals(StateChangeReturn.SUCCESS, mockGst.playElement(mockElm));
+        Thread stopElmThr = new Thread(() -> {
+            Assertions.assertEquals(StateChangeReturn.SUCCESS, mockGst.stopElement(mockElm));
+        });
+        willReturn(State.PLAYING).given(mockElm).getState();
+        willAnswer(invocation -> {
+            willReturn(State.NULL).given(mockElm).getState();
+            return StateChangeReturn.SUCCESS;
+        }).given(mockElm).stop();
+        stopElmThr.start();
+        try {
+            stopElmThr.join();
+        } catch (InterruptedException e) {
+            Assertions.fail();
+        }
         Assertions.assertThrows(NullPointerException.class, () -> mockGst.playElement(null));
-
-        Assertions.assertEquals(StateChangeReturn.SUCCESS, mockGst.stopElement(mockElm));
         Assertions.assertThrows(NullPointerException.class, () -> mockGst.stopElement(null));
+        Assertions.assertThrows(NullPointerException.class, () -> mockGst.getElementState(null));
+        Assertions.assertEquals(StateChangeReturn.SUCCESS, mockGst.playElement(mockElm));
+        Assertions.assertEquals(State.NULL, mockGst.getElementState(mockElm));
 
         Assertions.assertTrue(mockGst.sendElementEvent(mockElm, null));
         Assertions.assertThrows(NullPointerException.class,
                 () -> mockGst.sendElementEvent(null, null));
 
         Assertions.assertTrue(mockGst.sendPadEvent(mockPad, null));
-        Assertions.assertThrows(NullPointerException.class,
-                () -> mockGst.sendPadEvent(null, null));
+        Assertions.assertThrows(NullPointerException.class, () -> mockGst.sendPadEvent(null, null));
 
         Assertions.assertEquals(mockBus, mockGst.getPipelineBus(mockPipe));
         Assertions.assertThrows(NullPointerException.class, () -> mockGst.getPipelineBus(null));
@@ -241,6 +265,10 @@ public class GstDaoUnitTest {
         Assertions.assertDoesNotThrow(() -> mockGst.addPipelineElements(mockPipe, mockElm));
         Assertions.assertThrows(NullPointerException.class,
                 () -> mockGst.addPipelineElements(null, mockElm));
+
+        Assertions.assertDoesNotThrow(() -> mockGst.removePipelineElements(mockPipe, mockElm));
+        Assertions.assertThrows(NullPointerException.class,
+                () -> mockGst.removePipelineElements(null, mockElm));
 
         Assertions.assertEquals(mockCaps, mockGst.getPadCaps(mockPad));
         Assertions.assertThrows(NullPointerException.class, () -> mockGst.getPadCaps(null));
@@ -260,6 +288,11 @@ public class GstDaoUnitTest {
         Assertions.assertDoesNotThrow(() -> mockGst.addPadProbe(mockPad, PadProbeType.BLOCK, null));
         Assertions.assertThrows(NullPointerException.class,
                 () -> mockGst.addPadProbe(null, PadProbeType.BLOCK, null));
+
+        Set<PadProbeType> mask = new HashSet<PadProbeType>();
+        Assertions.assertDoesNotThrow(() -> mockGst.addPadProbe(mockPad, mask, null));
+        Assertions.assertThrows(NullPointerException.class,
+                () -> mockGst.addPadProbe(null, mask, null));
 
         Assertions.assertDoesNotThrow(() -> mockGst.removePadProbe(mockPad, null));
         Assertions.assertThrows(NullPointerException.class,
@@ -301,6 +334,23 @@ public class GstDaoUnitTest {
         Assertions.assertThrows(NullPointerException.class,
                 () -> mockGst.connectBus(null, (Bus.EOS) (source) -> {
                 }));
+        Assertions.assertDoesNotThrow(
+                () -> mockGst.disconnectBus(mockBus, (Bus.WARNING) (source, code, msg) -> {
+                }));
+        Assertions.assertThrows(NullPointerException.class,
+                () -> mockGst.disconnectBus(null, (Bus.WARNING) (source, code, msg) -> {
+                }));
+        Assertions.assertDoesNotThrow(
+                () -> mockGst.disconnectBus(mockBus, (Bus.ERROR) (source, code, msg) -> {
+                }));
+        Assertions.assertThrows(NullPointerException.class,
+                () -> mockGst.disconnectBus(null, (Bus.ERROR) (source, code, msg) -> {
+                }));
+        Assertions.assertDoesNotThrow(() -> mockGst.disconnectBus(mockBus, (Bus.EOS) (source) -> {
+        }));
+        Assertions.assertThrows(NullPointerException.class,
+                () -> mockGst.disconnectBus(null, (Bus.EOS) (source) -> {
+                }));
 
         Assertions.assertDoesNotThrow(() -> mockGst.connectAppSink(mockAppSink, (appElm) -> {
             return FlowReturn.OK;
@@ -309,5 +359,8 @@ public class GstDaoUnitTest {
                 () -> mockGst.connectAppSink(null, (appElm) -> {
                     return FlowReturn.OK;
                 }));
+
+        Assertions.assertDoesNotThrow(() -> mockGst.disposeGstObject(mockPad));
+        Assertions.assertThrows(NullPointerException.class, () -> mockGst.disposeGstObject(null));
     }
 }

@@ -18,19 +18,18 @@ package com.aws.iot.edgeconnectorforkvs.videorecorder.base;
 
 import static org.mockito.Mockito.*;
 import java.util.ArrayList;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.ReentrantLock;
-import static org.mockito.BDDMockito.*;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.model.ContainerType;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.model.RecorderCapability;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.util.GstDao;
+import static org.mockito.BDDMockito.*;
 import org.freedesktop.gstreamer.Element;
 import org.freedesktop.gstreamer.Pad;
+import org.freedesktop.gstreamer.PadLinkException;
 import org.freedesktop.gstreamer.PadProbeInfo;
 import org.freedesktop.gstreamer.Pipeline;
 import org.freedesktop.gstreamer.Pad.PROBE;
-import org.freedesktop.gstreamer.event.EOSEvent;
-import org.freedesktop.gstreamer.event.FlushStopEvent;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -57,13 +56,15 @@ public class RecorderBranchBaseUnitTest {
     @Mock
     private Pad mockTeePad;
     @Mock
+    private Pad mockTeePadDup;
+    @Mock
     private Pad mockQuePad;
     @Mock
     private PadProbeInfo mockProbeInfo;
     @Mock
-    private EOSEvent mockEosEvent;
+    private InterruptedException mockInterruptExcept;
     @Mock
-    private FlushStopEvent mockFlushEvent;
+    private PadLinkException mockPadLinkExcept;
 
     private class RecorderBranchTest extends RecorderBranchBase {
         public RecorderBranchTest(RecorderCapability cap) {
@@ -78,6 +79,16 @@ public class RecorderBranchBaseUnitTest {
         @Override
         public Pad getEntryVideoPad() {
             return mockVideoPad;
+        }
+
+        @Override
+        public void relEntryAudioPad(Pad pad) {
+            // do nothing
+        }
+
+        @Override
+        public void relEntryVideoPad(Pad pad) {
+            // do nothing
         }
 
         public GstDao getGstDao() {
@@ -96,16 +107,12 @@ public class RecorderBranchBaseUnitTest {
             return this.getFileExtensionFromType(type);
         }
 
-        public PROBE getProbe() {
+        public PROBE getProbeTee() {
             return this.getTeeBlockProbe();
         }
 
-        public void detachPub() {
-            this.detach();
-        }
-
-        public void attachPub() {
-            this.attach();
+        public PROBE getProbeQue() {
+            return this.getQueEosProbe();
         }
     }
 
@@ -117,8 +124,8 @@ public class RecorderBranchBaseUnitTest {
         Assertions.assertEquals(cap, testBranch.getCapability());
         Assertions.assertNotNull(testBranch.getGstDao());
         Assertions.assertNotNull(testBranch.getPipe());
-        Assertions.assertNotNull(testBranch.isAttachedExplicitly());
-        Assertions.assertNotNull(testBranch.isBranchAttached());
+        testBranch.setAutoBind(true);
+        Assertions.assertTrue(testBranch.isAutoBind());
     }
 
     @Test
@@ -163,8 +170,9 @@ public class RecorderBranchBaseUnitTest {
     }
 
     @Test
-    public void bindBranchTest_bindPaths_noExceptionThrow() {
-        RecorderBranchTest testBranchFull = new RecorderBranchTest(RecorderCapability.VIDEO_AUDIO);
+    public void bindBranchTest_bind_noExceptionThrow() {
+        RecorderBranchTest testBranchFull1 = new RecorderBranchTest(RecorderCapability.VIDEO_AUDIO);
+        RecorderBranchTest testBranchFull2 = new RecorderBranchTest(RecorderCapability.VIDEO_AUDIO);
         RecorderBranchTest testBranchVideo = new RecorderBranchTest(RecorderCapability.VIDEO_ONLY);
         RecorderBranchTest testBranchAudio = new RecorderBranchTest(RecorderCapability.AUDIO_ONLY);
         ArrayList<Element> teeVideos = new ArrayList<>();
@@ -173,23 +181,27 @@ public class RecorderBranchBaseUnitTest {
         teeVideos.add(mockTee);
         teeAudios.add(mockTee);
 
-        Assertions.assertDoesNotThrow(() -> testBranchFull.bindPaths(null, null));
-        Assertions.assertDoesNotThrow(() -> testBranchFull.bindPaths(teeVideos, teeAudios));
-        Assertions.assertDoesNotThrow(() -> testBranchVideo.bindPaths(teeVideos, teeAudios));
-        Assertions.assertDoesNotThrow(() -> testBranchAudio.bindPaths(teeVideos, teeAudios));
+        Assertions.assertDoesNotThrow(() -> testBranchFull1.bind(null, null));
+        Assertions.assertDoesNotThrow(() -> testBranchFull1.bind(null, null)); // duplicated bind
+        Assertions.assertDoesNotThrow(() -> testBranchFull2.bind(teeVideos, teeAudios));
+        Assertions.assertDoesNotThrow(() -> testBranchVideo.bind(teeVideos, teeAudios));
+        Assertions.assertDoesNotThrow(() -> testBranchAudio.bind(teeVideos, teeAudios));
     }
 
     @Test
-    public void reattach_reattach_noException() {
+    public void bind_unbindAfterBind_noException() {
         willReturn(mockQuePad).given(mockGst).getElementStaticPad(any(), anyString());
+        willReturn(mockTeePad).given(mockGst).getElementRequestPad(eq(mockTee), anyString());
+        willReturn(mockTeePadDup).given(mockGst).getElementRequestPad(eq(mockTeeDup), anyString());
 
         RecorderBranchTest testBranch = new RecorderBranchTest(RecorderCapability.VIDEO_AUDIO);
         ArrayList<Element> teeVideos = new ArrayList<>();
         ArrayList<Element> teeAudios = new ArrayList<>();
+        Thread th = null;
 
         teeVideos.add(mockTee);
         teeAudios.add(mockTeeDup);
-        testBranch.bindPaths(teeVideos, teeAudios);
+        testBranch.bind(teeVideos, teeAudios);
 
         Runnable padIdle = () -> {
             try {
@@ -197,23 +209,43 @@ public class RecorderBranchBaseUnitTest {
             } catch (InterruptedException e) {
                 Assertions.fail();
             }
-            testBranch.getProbe().probeCallback(mockTeePad, mockProbeInfo);
-            testBranch.getProbe().probeCallback(mockTeePad, mockProbeInfo);
+            testBranch.getProbeTee().probeCallback(mockTeePad, mockProbeInfo);
+            testBranch.getProbeTee().probeCallback(mockTeePadDup, mockProbeInfo);
+            testBranch.getProbeQue().probeCallback(mockQuePad, mockProbeInfo);
+            testBranch.getProbeQue().probeCallback(mockQuePad, mockProbeInfo);
         };
-        willReturn(false).given(mockGst).isPadLinked(any());
-        new Thread(padIdle).start();
-        testBranch.detachPub();
-        testBranch.attachPub();
-        willReturn(true).given(mockGst).isPadLinked(any());
-        new Thread(padIdle).start();
-        testBranch.detachPub();
-        testBranch.attachPub();
+        willReturn(true).given(mockGst).unlinkPad(any(), any());
+        th = new Thread(padIdle);
+        th.start();
+        testBranch.unbind();
+        testBranch.unbind(); // duplicated unbind
+        try {
+            th.join();
+        } catch (InterruptedException e) {
+            Assertions.fail();
+        }
+
+        // link failed
+        willThrow(mockPadLinkExcept).given(mockGst).linkPad(any(), any());
+        testBranch.bind(teeVideos, teeAudios);
+        // unlink fail
+        willReturn(false).given(mockGst).unlinkPad(any(), any());
+        th = new Thread(padIdle);
+        th.start();
+        testBranch.unbind();
+        try {
+            th.join();
+        } catch (InterruptedException e) {
+            Assertions.fail();
+        }
     }
 
     @Test
-    public void reattach_reattach_awaitException() {
-        try (MockedConstruction<ReentrantLock> mockCondLock =
-                mockConstruction(ReentrantLock.class)) {
+    public void unbind_waitForDeattach_awaitException() {
+        try (MockedConstruction<CountDownLatch> mockLatch =
+                mockConstruction(CountDownLatch.class, (mock, context) -> {
+                    willThrow(mockInterruptExcept).given(mock).await();
+                })) {
             willReturn(mockQuePad).given(mockGst).getElementStaticPad(any(), anyString());
 
             RecorderBranchTest testBranch = new RecorderBranchTest(RecorderCapability.VIDEO_AUDIO);
@@ -221,11 +253,10 @@ public class RecorderBranchBaseUnitTest {
 
             teeVideos.add(mockTee);
 
-            testBranch.bindPaths(teeVideos, null);
+            testBranch.bind(teeVideos, null);
 
-            // Use NullPointerException instead of InterruptException because of JUnit
-            // The exception of Condition.await is handle in recorder
-            Assertions.assertDoesNotThrow(() -> testBranch.detachPub());
+            // The exception of deattachCnt.await is handle in BranchBase
+            Assertions.assertDoesNotThrow(() -> testBranch.unbind());
         }
     }
 }

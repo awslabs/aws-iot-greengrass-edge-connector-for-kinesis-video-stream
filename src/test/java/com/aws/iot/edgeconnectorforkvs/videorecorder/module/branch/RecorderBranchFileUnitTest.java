@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
-package com.aws.iot.edgeconnectorforkvs.videorecorder;
+package com.aws.iot.edgeconnectorforkvs.videorecorder.module.branch;
 
 import static org.mockito.BDDMockito.*;
-import com.aws.iot.edgeconnectorforkvs.videorecorder.RecorderBranchFile.LocCallback;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.model.ContainerType;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.module.branch.RecorderBranchFile.LocCallback;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.util.GstDao;
+import org.freedesktop.gstreamer.Element;
+import org.freedesktop.gstreamer.Pad;
 import org.freedesktop.gstreamer.Pipeline;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -36,27 +38,36 @@ public class RecorderBranchFileUnitTest {
     private GstDao mockGst;
     @Mock
     private Pipeline mockPipeline;
+    @Mock
+    private Element mockElm;
 
     @Test
     void createBranchAppTest_setProperty_noException() {
         willDoNothing().given(this.mockGst).setElement(any(), anyString(), any());
+        willReturn(mockElm).given(mockGst).newElement(anyString());
         willThrow(new IllegalArgumentException()).given(this.mockGst).setElement(any(),
                 eq("invalid_property"), any());
 
         RecorderBranchFile branch = new RecorderBranchFile(ContainerType.MATROSKA, this.mockGst,
                 this.mockPipeline, PATH_URI);
 
+        Assertions.assertTrue(branch.setProperty("invalid_property", 0));
+        branch.bind(null, null);
         Assertions.assertTrue(branch.setProperty("max-size-time", 0));
         Assertions.assertFalse(branch.setProperty("invalid_property", 0));
+        branch.unbind();
     }
 
     @Test
     void getPadTest_invokeMethod_noException() {
+        Pad mockPad = mock(Pad.class);
         RecorderBranchFile branch = new RecorderBranchFile(ContainerType.MATROSKA, this.mockGst,
                 this.mockPipeline, PATH_URI);
 
         Assertions.assertDoesNotThrow(() -> branch.getEntryAudioPad());
         Assertions.assertDoesNotThrow(() -> branch.getEntryVideoPad());
+        Assertions.assertDoesNotThrow(() -> branch.relEntryAudioPad(mockPad));
+        Assertions.assertDoesNotThrow(() -> branch.relEntryVideoPad(mockPad));
     }
 
     @Test
@@ -70,6 +81,8 @@ public class RecorderBranchFileUnitTest {
                 this.mockPipeline, PATH_URI);
 
         branch.setProperty("max-size-time", 10000000L);
+        branch.bind(null, null);
         Assertions.assertDoesNotThrow(() -> locCallback.callback(null, 0, null));
+        branch.unbind();
     }
 }

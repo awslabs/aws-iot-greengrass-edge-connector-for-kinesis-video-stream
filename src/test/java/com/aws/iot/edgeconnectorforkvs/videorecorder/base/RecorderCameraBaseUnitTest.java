@@ -16,6 +16,9 @@
 
 package com.aws.iot.edgeconnectorforkvs.videorecorder.base;
 
+import com.aws.iot.edgeconnectorforkvs.videorecorder.base.RecorderCameraBase.CapabilityListener;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.base.RecorderCameraBase.ErrorListener;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.base.RecorderCameraBase.NewPadListener;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.util.GstDao;
 import org.freedesktop.gstreamer.Pipeline;
 import org.junit.jupiter.api.Assertions;
@@ -32,9 +35,9 @@ public class RecorderCameraBaseUnitTest {
     @Mock
     private Pipeline mockPipeline;
 
-    private RecorderCameraBase.CapabilityListener capListener;
-    private RecorderCameraBase.NewPadListener padListener;
-    private RecorderCameraBase.ErrorListener errListener;
+    private CapabilityListener capListener;
+    private NewPadListener padListener;
+    private ErrorListener errListener;
 
     private class RecorderCameraTest extends RecorderCameraBase {
         public RecorderCameraTest() {
@@ -77,5 +80,27 @@ public class RecorderCameraBaseUnitTest {
                 () -> camera.registerListener(this.capListener, null, this.errListener));
         Assertions.assertThrows(NullPointerException.class,
                 () -> camera.registerListener(null, this.padListener, this.errListener));
+    }
+
+    @Test
+    void callGetter_getObject_notNull() {
+        RecorderCameraTest camera = new RecorderCameraTest();
+
+        Assertions.assertDoesNotThrow(() -> camera.registerListener(this.capListener,
+                this.padListener, this.errListener));
+
+        Assertions.assertNotNull(camera.getCapListener());
+        Assertions.assertNotNull(camera.getPadListener());
+        Assertions.assertNotNull(camera.getErrListener());
+        Assertions.assertNotNull(camera.getGstCore());
+        Assertions.assertNotNull(camera.getPipeline());
+    }
+
+    @Test
+    void invokdOnBind_doNothing_doesNotException() {
+        RecorderCameraTest camera = new RecorderCameraTest();
+
+        Assertions.assertDoesNotThrow(() -> camera.onBind());
+        Assertions.assertDoesNotThrow(() -> camera.onUnbind());
     }
 }

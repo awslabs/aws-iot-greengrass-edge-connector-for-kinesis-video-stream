@@ -16,10 +16,6 @@
 
 package com.aws.iot.edgeconnectorforkvs.videorecorder;
 
-import com.aws.iot.edgeconnectorforkvs.videorecorder.model.ContainerType;
-import com.aws.iot.edgeconnectorforkvs.videorecorder.callback.StatusCallback;
-import com.aws.iot.edgeconnectorforkvs.videorecorder.model.CameraType;
-import com.aws.iot.edgeconnectorforkvs.videorecorder.util.GstDao;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
@@ -33,11 +29,28 @@ import java.io.PipedOutputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.concurrent.RejectedExecutionException;
-
+import java.util.concurrent.TimeUnit;
+import com.aws.iot.edgeconnectorforkvs.monitor.Monitor;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.VideoRecorder.RecorderBranchAppMonitor;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.VideoRecorder.RecorderBranchFileMonitor;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.base.RecorderCameraBase.CapabilityListener;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.base.RecorderCameraBase.ErrorListener;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.base.RecorderCameraBase.NewPadListener;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.callback.StatusCallback;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.model.CameraType;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.model.ContainerType;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.model.RecorderCapability;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.model.RecorderStatus;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.module.branch.RecorderBranchFile;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.module.branch.RecorderBranchFile.LocCallback;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.module.camera.RecorderCameraRtsp;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.util.GstDao;
 import org.freedesktop.gstreamer.Buffer;
 import org.freedesktop.gstreamer.Bus;
 import org.freedesktop.gstreamer.Element;
 import org.freedesktop.gstreamer.Pad;
+import org.freedesktop.gstreamer.PadProbeInfo;
+import org.freedesktop.gstreamer.PadProbeType;
 import org.freedesktop.gstreamer.Pipeline;
 import org.freedesktop.gstreamer.Sample;
 import org.freedesktop.gstreamer.elements.AppSink;
@@ -73,8 +86,14 @@ public class VideoRecorderUnitTest {
     private Pad mockGstPad;
     @Mock
     private AppSink mockGstAppSink;
+    @Mock
+    private RecorderCameraRtsp mockCamera;
 
     private AppSink.NEW_SAMPLE appsNewSampleListener;
+    private CapabilityListener capListener;
+    private NewPadListener padListener;
+    private volatile Pad.PROBE branchIdleProbe;
+    private LocCallback locCallback;
 
     private static class RunnableRecorder implements Runnable {
         private VideoRecorder recorder;
@@ -85,7 +104,17 @@ public class VideoRecorderUnitTest {
 
         @Override
         public void run() {
-            recorder.startRecording();
+            recorder.start();
+        }
+    }
+
+    private void waitRecorderUntil(VideoRecorder recorder, RecorderStatus st) {
+        while (recorder.getStatus() != st) {
+            try {
+                TimeUnit.MILLISECONDS.sleep(5);
+            } catch (InterruptedException e) {
+                Assertions.fail();
+            }
         }
     }
 
@@ -96,7 +125,6 @@ public class VideoRecorderUnitTest {
 
         willReturn(mockGstPipeline).given(mockGst).newPipeline();
         willReturn(mockGstBus).given(mockGst).getPipelineBus(any(Pipeline.class));
-        willReturn(mockGstElement).given(mockGst).newElement(anyString());
     }
 
     @AfterEach
@@ -123,12 +151,13 @@ public class VideoRecorderUnitTest {
 
         VideoRecorderBuilder builder = new VideoRecorderBuilder(mockGst, STATE_CALLBACK);
 
-        Assertions.assertTrue(() -> builder.registerCamera(REC_TYPE, SRC_URL));
+        Assertions.assertTrue(() -> builder.addCameraSource(REC_TYPE, SRC_URL));
         Assertions.assertTrue(builder.registerFileSink(CON_TYPE, "./record"));
 
         // Set valid source and stored property should succeed
-        Assertions.assertTrue(builder.setCameraProperty("location", SRC_URL));
-        Assertions.assertTrue(builder.setFilePathProperty("max-size-time", 0));
+        VideoRecorder recorder = builder.construct();
+        Assertions.assertTrue(recorder.setCameraProperty("location", SRC_URL));
+        Assertions.assertTrue(recorder.setFilePathProperty("max-size-time", 0));
     }
 
     @Test
@@ -137,21 +166,26 @@ public class VideoRecorderUnitTest {
 
         // Unsupported camera type
         Assertions.assertThrows(IllegalArgumentException.class,
-                () -> builder.registerCamera(CameraType.UNSUPPORTED, SRC_URL));
+                () -> builder.addCameraSource(CameraType.UNSUPPORTED, SRC_URL));
 
-        // Set property to invalid target should return false
-        Assertions.assertFalse(builder.setCameraProperty(INVALID_ELEMENT_PROPERTY, 0));
-        Assertions.assertFalse(builder.setFilePathProperty(INVALID_ELEMENT_PROPERTY, 0));
-
-        // Construct a recorder with incomplete pipeline should retrieve exceptions
+        // Construct a recorder without a camera should retrieve exceptions
         Assertions.assertThrows(RejectedExecutionException.class, () -> builder.construct());
 
-        Assertions.assertTrue(() -> builder.registerCamera(REC_TYPE, SRC_URL));
+        // Construct a recorder without a branch should retrieve exceptions
+        Assertions.assertTrue(() -> builder.addCameraSource(REC_TYPE, SRC_URL));
+        Assertions.assertFalse(() -> builder.addCameraSource(REC_TYPE, SRC_URL));
+        Assertions.assertThrows(RejectedExecutionException.class, () -> builder.construct());
+
+        // Set property to invalid target should return false
+        Assertions.assertTrue(
+                builder.registerAppDataCallback(ContainerType.MATROSKA, (rec, bBuff) -> {
+                }));
+        VideoRecorder recorder = builder.construct();
+        Assertions.assertFalse(recorder.setFilePathProperty(INVALID_ELEMENT_PROPERTY, 0));
     }
 
     @Test
     public void registerCustomized_customizedModule_exceptionDoesNotThrow() {
-        VideoRecorder recorder = null;
         VideoRecorderBuilder builder = new VideoRecorderBuilder(mockGst, STATE_CALLBACK);
         GstDao dao = builder.getGstDao();
         Pipeline pipe = builder.getPipeline();
@@ -161,27 +195,23 @@ public class VideoRecorderUnitTest {
                 new RecorderBranchFile(ContainerType.MATROSKA, dao, pipe, "./record");
 
         // Add cam
-        Assertions.assertThrows(RejectedExecutionException.class, () -> builder.construct());
         Assertions.assertTrue(builder.registerCustomCamera(cameraSrc));
         Assertions.assertFalse(builder.registerCustomCamera(cameraSrc));
 
         // Add branch
-        Assertions.assertThrows(RejectedExecutionException.class, () -> builder.construct());
-        Assertions.assertTrue(builder.registerCustomBranch(filePath, "customBranch"));
-        Assertions.assertFalse(builder.registerCustomBranch(filePath, "customBranch"));
+        Assertions.assertTrue(builder.registerCustomBranch(filePath, "customBranch", true));
+        Assertions.assertFalse(builder.registerCustomBranch(filePath, "customBranch", true));
 
         // Get branch
-        recorder = builder.construct();
-        Assertions.assertNotNull(recorder.getBranch("customBranch"));
-        Assertions.assertTrue(null == recorder.getBranch("NoSuchBranch"));
+        Assertions.assertNotNull(builder.construct());
     }
 
     @Test
     public void registerFileSinkTest_alreadyAdded_returnFalse() {
         VideoRecorderBuilder builder = new VideoRecorderBuilder(mockGst, STATE_CALLBACK);
 
-        Assertions.assertTrue(() -> builder.registerCamera(REC_TYPE, SRC_URL));
-        Assertions.assertFalse(() -> builder.registerCamera(REC_TYPE, SRC_URL));
+        Assertions.assertTrue(() -> builder.addCameraSource(REC_TYPE, SRC_URL));
+
         // add file sink should succeed
         Assertions.assertTrue(builder.registerFileSink(CON_TYPE, "./record"));
         // add file sink again should be failed
@@ -199,15 +229,13 @@ public class VideoRecorderUnitTest {
             Assertions.fail();
         }
 
-        builder.registerCamera(REC_TYPE, SRC_URL);
+        builder.addCameraSource(REC_TYPE, SRC_URL);
         builder.registerFileSink(CON_TYPE, "./record");
         recorder = builder.construct();
 
         // enable/disable invalid pipeline branches should get FALSE
         Assertions.assertFalse(recorder.toggleAppDataCallback(true));
-        Assertions.assertFalse(recorder.toggleAppDataCallback(false));
         Assertions.assertFalse(recorder.toggleAppDataOutputStream(true));
-        Assertions.assertFalse(recorder.toggleAppDataOutputStream(false));
 
         Assertions.assertFalse(recorder.setAppDataCallback((rec, buff) -> {
         }));
@@ -216,12 +244,9 @@ public class VideoRecorderUnitTest {
 
     @Test
     public void addAppCbTest_alreadyAdded_returnFalse() {
-        willReturn(mockGstAppSink).given(mockGst).newElement(eq("appsink"));
-        willReturn(true).given(mockGst).linkManyElement(any(Element.class));
-
         VideoRecorderBuilder builder = new VideoRecorderBuilder(mockGst, STATE_CALLBACK);
 
-        builder.registerCamera(REC_TYPE, SRC_URL);
+        builder.addCameraSource(REC_TYPE, SRC_URL);
         // Register null callback should retrieve exceptions
         Assertions.assertThrows(NullPointerException.class,
                 () -> builder.registerAppDataCallback(ContainerType.MATROSKA, null));
@@ -237,12 +262,9 @@ public class VideoRecorderUnitTest {
 
     @Test
     public void toggleAppCbTest_enableDisable_returnFalse() {
-        willReturn(mockGstAppSink).given(mockGst).newElement(eq("appsink"));
-        willReturn(true).given(mockGst).linkManyElement(any(Element.class));
-
         VideoRecorderBuilder builder = new VideoRecorderBuilder(mockGst, STATE_CALLBACK);
 
-        builder.registerCamera(REC_TYPE, SRC_URL);
+        builder.addCameraSource(REC_TYPE, SRC_URL);
         // register app callback
         builder.registerAppDataCallback(ContainerType.MATROSKA, (rec, bBuff) -> {
         });
@@ -253,12 +275,9 @@ public class VideoRecorderUnitTest {
         Assertions.assertTrue(recorder.toggleAppDataCallback(true));
         Assertions.assertFalse(recorder.setAppDataCallback((rec, buff) -> {
         }));
-        // Should be false if callback is already enabled
-        Assertions.assertFalse(recorder.toggleAppDataCallback(true));
+
         // Should be true when disabling callback
         Assertions.assertTrue(recorder.toggleAppDataCallback(false));
-        // Should be false when callback is already disabled
-        Assertions.assertFalse(recorder.toggleAppDataCallback(false));
         Assertions.assertTrue(recorder.setAppDataCallback((rec, buff) -> {
         }));
         Assertions.assertThrows(NullPointerException.class,
@@ -267,12 +286,24 @@ public class VideoRecorderUnitTest {
 
     @Test
     public void addAppCbTest_toggleRecording_callbackInvoked() {
+        willReturn(mockGstElement).given(mockGst).newElement(anyString());
         willReturn(mockGstAppSink).given(mockGst).newElement(eq("appsink"));
         willReturn(true).given(mockGst).linkManyElement(any(Element.class));
+        willAnswer(invocation -> {
+            branchIdleProbe = invocation.getArgument(2);
+            return null;
+        }).given(mockGst).addPadProbe(any(), any(PadProbeType.class), any(Pad.PROBE.class));
+        willAnswer(invocation -> {
+            capListener = invocation.getArgument(0);
+            padListener = invocation.getArgument(1);
+            return null;
+        }).given(mockCamera).registerListener(any(CapabilityListener.class),
+                any(NewPadListener.class), any(ErrorListener.class));
 
         final byte[] testArray = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
         Sample mockGstSample = mock(Sample.class);
         Buffer mockGstBuffer = mock(Buffer.class);
+        PadProbeInfo mockProbeInfo = mock(PadProbeInfo.class);
         ByteBuffer byteBuffer = ByteBuffer.wrap(testArray);
         VideoRecorderBuilder builder = new VideoRecorderBuilder(mockGst, STATE_CALLBACK);
         VideoRecorder recorder = null;
@@ -286,8 +317,9 @@ public class VideoRecorderUnitTest {
         willReturn(mockGstSample).given(mockGstAppSink).pullSample();
         willReturn(mockGstBuffer).given(mockGstSample).getBuffer();
         willReturn(byteBuffer).given(mockGstBuffer).map(any(Boolean.class));
+        willReturn(mockGstPad).given(mockGst).getElementRequestPad(any(Element.class), anyString());
 
-        builder.registerCamera(REC_TYPE, SRC_URL);
+        builder.registerCustomCamera(mockCamera);
         // register app callback
         builder.registerAppDataCallback(ContainerType.MATROSKA, (rec, bBuff) -> {
             // app callback should be invoked in newSample listener
@@ -297,21 +329,38 @@ public class VideoRecorderUnitTest {
         });
         recorder = builder.construct();
         recordThread = new Thread(new RunnableRecorder(recorder));
-        recorder.toggleAppDataCallback(true);
+
         recordThread.start();
+        this.waitRecorderUntil(recorder, RecorderStatus.STARTED);
 
         // trigger callback manually
+        capListener.onNotify(0, 1);
+        padListener.onNotify(RecorderCapability.VIDEO_ONLY, mockGstPad);
+        recorder.toggleAppDataCallback(true);
         appsNewSampleListener.newSample(mockGstAppSink);
 
         // stop recording
-        recorder.stopRecording();
+        branchIdleProbe = null;
+        recorder.stop();
+        while (branchIdleProbe == null) {
+            try {
+                TimeUnit.MILLISECONDS.sleep(5);
+            } catch (InterruptedException e) {
+                Assertions.fail();
+            }
+        }
+        branchIdleProbe.probeCallback(mockGstPad, mockProbeInfo);
+        branchIdleProbe.probeCallback(mockGstPad, mockProbeInfo);
+
+        try {
+            recordThread.join();
+        } catch (InterruptedException e) {
+            Assertions.fail();
+        }
     }
 
     @Test
     public void addAppOsTest_alreadyAdded_returnFalse() {
-        willReturn(mockGstAppSink).given(mockGst).newElement(eq("appsink"));
-        willReturn(true).given(mockGst).linkManyElement(any(Element.class));
-
         VideoRecorderBuilder builder = new VideoRecorderBuilder(mockGst, STATE_CALLBACK);
 
         try {
@@ -320,7 +369,7 @@ public class VideoRecorderUnitTest {
             Assertions.fail();
         }
 
-        builder.registerCamera(REC_TYPE, SRC_URL);
+        builder.addCameraSource(REC_TYPE, SRC_URL);
         // Register null OutputStream should retrieve exceptions
         Assertions.assertThrows(NullPointerException.class,
                 () -> builder.registerAppDataOutputStream(ContainerType.MATROSKA, null));
@@ -334,8 +383,6 @@ public class VideoRecorderUnitTest {
 
     @Test
     public void toggleAppOsTest_enableDisable_returnFalse() {
-        willReturn(mockGstAppSink).given(mockGst).newElement(eq("appsink"));
-        willReturn(true).given(mockGst).linkManyElement(any(Element.class));
         try {
             testOutputStream = new FileOutputStream("/dev/null");
         } catch (FileNotFoundException e) {
@@ -344,7 +391,7 @@ public class VideoRecorderUnitTest {
 
 
         VideoRecorderBuilder builder = new VideoRecorderBuilder(mockGst, STATE_CALLBACK);
-        builder.registerCamera(REC_TYPE, SRC_URL);
+        builder.addCameraSource(REC_TYPE, SRC_URL);
         // register app OutputStream
         builder.registerAppDataOutputStream(ContainerType.MATROSKA, testOutputStream);
 
@@ -352,13 +399,9 @@ public class VideoRecorderUnitTest {
 
         // Should be true when enabling OutputStream
         Assertions.assertTrue(recorder.toggleAppDataOutputStream(true));
-        Assertions.assertFalse(recorder.setAppDataOutputStream(testOutputStream));
-        // Should be false if OutputStream is already enabled
-        Assertions.assertFalse(recorder.toggleAppDataOutputStream(true));
+        Assertions.assertFalse(recorder.setAppDataOutputStream(testOutputStream));;
         // Should be true when disabling OutputStream
         Assertions.assertTrue(recorder.toggleAppDataOutputStream(false));
-        // Should be false when OutputStream is already disabled
-        Assertions.assertFalse(recorder.toggleAppDataOutputStream(false));
         Assertions.assertTrue(recorder.setAppDataOutputStream(testOutputStream));
         Assertions.assertThrows(NullPointerException.class,
                 () -> recorder.setAppDataOutputStream(null));
@@ -366,12 +409,24 @@ public class VideoRecorderUnitTest {
 
     @Test
     public void addAppOsTest_toggleRecording_stateChanged() {
+        willReturn(mockGstElement).given(mockGst).newElement(anyString());
         willReturn(mockGstAppSink).given(mockGst).newElement(eq("appsink"));
         willReturn(true).given(mockGst).linkManyElement(any(Element.class));
+        willAnswer(invocation -> {
+            branchIdleProbe = invocation.getArgument(2);
+            return null;
+        }).given(mockGst).addPadProbe(any(), any(PadProbeType.class), any(Pad.PROBE.class));
+        willAnswer(invocation -> {
+            capListener = invocation.getArgument(0);
+            padListener = invocation.getArgument(1);
+            return null;
+        }).given(mockCamera).registerListener(any(CapabilityListener.class),
+                any(NewPadListener.class), any(ErrorListener.class));
 
         final byte[] testArray = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
         Sample mockGstSample = mock(Sample.class);
         Buffer mockGstBuffer = mock(Buffer.class);
+        PadProbeInfo mockProbeInfo = mock(PadProbeInfo.class);
         ByteBuffer byteBuffer = ByteBuffer.wrap(testArray);
         VideoRecorderBuilder builder = new VideoRecorderBuilder(mockGst, STATE_CALLBACK);
         VideoRecorder recorder = null;
@@ -386,34 +441,67 @@ public class VideoRecorderUnitTest {
         willReturn(mockGstSample).given(mockGstAppSink).pullSample();
         willReturn(mockGstBuffer).given(mockGstSample).getBuffer();
         willReturn(byteBuffer).given(mockGstBuffer).map(any(Boolean.class));
+        willReturn(mockGstPad).given(mockGst).getElementRequestPad(any(Element.class), anyString());
 
         // register app OutputStream
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         testOutputStream = baos;
-        builder.registerCamera(REC_TYPE, SRC_URL);
+        builder.registerCustomCamera(mockCamera);
         builder.registerAppDataOutputStream(ContainerType.MATROSKA, testOutputStream);
 
         recorder = builder.construct();
         recordThread = new Thread(new RunnableRecorder(recorder));
-        recorder.toggleAppDataOutputStream(true);
+
         recordThread.start();
+        this.waitRecorderUntil(recorder, RecorderStatus.STARTED);
 
         // trigger to write OutputStream
+        capListener.onNotify(0, 1);
+        padListener.onNotify(RecorderCapability.VIDEO_ONLY, mockGstPad);
+        recorder.toggleAppDataOutputStream(true);
         appsNewSampleListener.newSample(mockGstAppSink);
         byte data[] = baos.toByteArray();
         Assertions.assertTrue(Arrays.equals(testArray, data));
 
-        recorder.stopRecording();
+        branchIdleProbe = null;
+        recorder.stop();
+        while (branchIdleProbe == null) {
+            try {
+                TimeUnit.MILLISECONDS.sleep(5);
+            } catch (InterruptedException e) {
+                Assertions.fail();
+            }
+        }
+        branchIdleProbe.probeCallback(mockGstPad, mockProbeInfo);
+        branchIdleProbe.probeCallback(mockGstPad, mockProbeInfo);
+
+        try {
+            recordThread.join();
+        } catch (InterruptedException e) {
+            Assertions.fail();
+        }
     }
 
     @Test
     public void addAppOsTest_writeFailed_exceptionDoesNotThrow() {
+        willReturn(mockGstElement).given(mockGst).newElement(anyString());
         willReturn(mockGstAppSink).given(mockGst).newElement(eq("appsink"));
         willReturn(true).given(mockGst).linkManyElement(any(Element.class));
+        willAnswer(invocation -> {
+            branchIdleProbe = invocation.getArgument(2);
+            return null;
+        }).given(mockGst).addPadProbe(any(), any(PadProbeType.class), any(Pad.PROBE.class));
+        willAnswer(invocation -> {
+            capListener = invocation.getArgument(0);
+            padListener = invocation.getArgument(1);
+            return null;
+        }).given(mockCamera).registerListener(any(CapabilityListener.class),
+                any(NewPadListener.class), any(ErrorListener.class));
 
         final byte[] testArray = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
         Sample mockGstSample = mock(Sample.class);
         Buffer mockGstBuffer = mock(Buffer.class);
+        PadProbeInfo mockProbeInfo = mock(PadProbeInfo.class);
         ByteBuffer byteBuffer = ByteBuffer.wrap(testArray);
         VideoRecorderBuilder builder = new VideoRecorderBuilder(mockGst, STATE_CALLBACK);
         VideoRecorder recorder = null;
@@ -428,17 +516,19 @@ public class VideoRecorderUnitTest {
         willReturn(mockGstSample).given(mockGstAppSink).pullSample();
         willReturn(mockGstBuffer).given(mockGstSample).getBuffer();
         willReturn(byteBuffer).given(mockGstBuffer).map(any(Boolean.class));
+        willReturn(mockGstPad).given(mockGst).getElementRequestPad(any(Element.class), anyString());
 
         // register app OutputStream
         PipedOutputStream pipedOutputStream = new PipedOutputStream();
         testOutputStream = pipedOutputStream;
-        builder.registerCamera(REC_TYPE, SRC_URL);
+        builder.registerCustomCamera(mockCamera);
         builder.registerAppDataOutputStream(ContainerType.MATROSKA, testOutputStream);
 
         recorder = builder.construct();
         recordThread = new Thread(new RunnableRecorder(recorder));
-        recorder.toggleAppDataOutputStream(true);
+
         recordThread.start();
+        this.waitRecorderUntil(recorder, RecorderStatus.STARTED);
 
         try {
             pipedOutputStream.close();
@@ -446,9 +536,65 @@ public class VideoRecorderUnitTest {
         } catch (IOException e) {
             Assertions.fail();
         }
+
         // exception is handled in the recorder
+        capListener.onNotify(0, 1);
+        padListener.onNotify(RecorderCapability.VIDEO_ONLY, mockGstPad);
+        recorder.toggleAppDataOutputStream(true);
         Assertions.assertDoesNotThrow(() -> appsNewSampleListener.newSample(mockGstAppSink));
 
-        recorder.stopRecording();
+        branchIdleProbe = null;
+        recorder.stop();
+        while (branchIdleProbe == null) {
+            try {
+                TimeUnit.MILLISECONDS.sleep(5);
+            } catch (InterruptedException e) {
+                Assertions.fail();
+            }
+        }
+        branchIdleProbe.probeCallback(mockGstPad, mockProbeInfo);
+        branchIdleProbe.probeCallback(mockGstPad, mockProbeInfo);
+
+        try {
+            recordThread.join();
+        } catch (InterruptedException e) {
+            Assertions.fail();
+        }
+    }
+
+    @Test
+    public void monitorBranch_bindUnbind_noException() {
+        willAnswer(invocation -> {
+            locCallback = invocation.getArgument(2);
+            return null;
+        }).given(this.mockGst).connectElement(any(), eq("format-location"), any(LocCallback.class));
+
+        Monitor mockMonitor = mock(Monitor.class);
+        VideoRecorderBuilder builder = new VideoRecorderBuilder(mockGst, STATE_CALLBACK);
+        VideoRecorder recorder;
+
+        builder.registerCustomCamera(mockCamera);
+        builder.registerAppDataCallback(ContainerType.MATROSKA, (rec, bBuff) -> {
+        });
+        recorder = builder.construct();
+
+        RecorderBranchFileMonitor branchFile =
+                recorder.new RecorderBranchFileMonitor(ContainerType.MATROSKA, this.mockGst,
+                        this.mockGstPipeline, "./recorder", "monitorFile");
+
+        branchFile.onBind();
+        locCallback.callback(null, 0, null);
+        branchFile.getMonitorCheck().check(mockMonitor, "monitorFile", null);
+        branchFile.getMonitorCheck().check(mockMonitor, "monitorFile", null);
+        branchFile.onUnbind();
+
+        RecorderBranchAppMonitor branchApp = recorder.new RecorderBranchAppMonitor(
+                ContainerType.MATROSKA, this.mockGst, this.mockGstPipeline, "monitorApp");
+
+        branchApp.onBind();
+        branchApp.getMonitorCheck().check(mockMonitor, "monitorApp", null);
+        branchApp.increaseAppCallbackDataCnt();
+        branchApp.getMonitorCheck().check(mockMonitor, "monitorApp", null);
+        branchApp.onUnbind();
     }
 }
