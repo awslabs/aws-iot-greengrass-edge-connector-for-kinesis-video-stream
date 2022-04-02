@@ -66,5 +66,15 @@ public final class Config {
      */
     public static final RecorderCapability APP_PATH_CAPABILITY = RecorderCapability.VIDEO_AUDIO;
 
+    /**
+     * Default file branch monitor period in milliiseconds.
+     */
+    public static final long FILE_PATH_MONITOR_PERIOD =
+            (long) (Config.DEFAULT_FILE_ROTATION_IN_NS / 1_000_000 * 1.2);
+    /**
+     * Default app branch monitor period in milliseconds.
+     */
+    public static final long APP_PATH_MONITOR_PERIOD = 30_000;
+
     private Config() {}
 }

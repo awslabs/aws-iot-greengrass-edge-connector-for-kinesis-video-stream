@@ -14,7 +14,7 @@ public class StreamUtilsTest {
     public void testFlushInputStream() throws IOException {
         //when
         String initialString = "text";
-        InputStream targetStream = IOUtils.toInputStream(initialString);
+        InputStream targetStream = IOUtils.toInputStream(initialString, StandardCharsets.US_ASCII);
 
         Thread thread = new Thread(() -> {
             try (final BufferedReader reader

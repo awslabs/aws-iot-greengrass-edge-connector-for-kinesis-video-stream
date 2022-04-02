@@ -22,8 +22,8 @@ import com.aws.iot.edgeconnectorforkvs.videorecorder.base.RecorderBranchBase;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.base.RecorderCameraBase;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.callback.AppDataCallback;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.callback.StatusCallback;
-import com.aws.iot.edgeconnectorforkvs.videorecorder.model.ContainerType;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.model.CameraType;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.model.ContainerType;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.util.GstDao;
 import org.freedesktop.gstreamer.Pipeline;
 import lombok.NonNull;
@@ -78,7 +78,7 @@ public class VideoRecorderBuilder {
         boolean canRegister = false;
 
         if (!this.hasCamera) {
-            canRegister = this.recorder.registerCamera(cameraSrc);
+            canRegister = this.recorder.addCameraSource(cameraSrc);
             this.hasCamera |= canRegister;
         }
 
@@ -92,11 +92,11 @@ public class VideoRecorderBuilder {
      * @param sourceUrl source Url
      * @return true if success
      */
-    public boolean registerCamera(CameraType type, String sourceUrl) {
+    public boolean addCameraSource(CameraType type, String sourceUrl) {
         boolean canRegister = false;
 
         if (!this.hasCamera) {
-            canRegister = this.recorder.registerCamera(type, sourceUrl);
+            canRegister = this.recorder.addCameraSource(type, sourceUrl);
             this.hasCamera |= canRegister;
         }
 
@@ -104,25 +104,15 @@ public class VideoRecorderBuilder {
     }
 
     /**
-     * Set GStreamer properties for camera source.
-     *
-     * @param property camera properties
-     * @param data value to be set
-     * @return true if success
-     */
-    public boolean setCameraProperty(String property, Object data) {
-        return this.recorder.setCameraProperty(property, data);
-    }
-
-    /**
      * Register a customized branch module to recorder module.
      *
      * @param branch customized branch
      * @param branchName branch name
+     * @param autoBind set the branch to be bound automatically
      * @return true if success
      */
-    public boolean registerCustomBranch(RecorderBranchBase branch, String branchName) {
-        boolean canRegister = this.recorder.registerBranch(branch, branchName);
+    public boolean registerCustomBranch(RecorderBranchBase branch, String branchName, boolean autoBind) {
+        boolean canRegister = this.recorder.addBranch(branch, branchName, autoBind);
 
         this.hasCustomBranch |= canRegister;
 
@@ -147,25 +137,6 @@ public class VideoRecorderBuilder {
         }
 
         return canRegister;
-    }
-
-    /**
-     * Set GStreamer properties for splitmuxsink.
-     *
-     * @param property splitmuxsink properties
-     * @param data value to be set
-     * @return true if success
-     */
-    public boolean setFilePathProperty(String property, Object data) {
-        boolean result = false;
-
-        if (!this.hasFileBranch) {
-            log.error("SetProperty fails because file sink is not registered.");
-        } else {
-            result = this.recorder.setFilePathProperty(property, data);
-        }
-
-        return result;
     }
 
     /**

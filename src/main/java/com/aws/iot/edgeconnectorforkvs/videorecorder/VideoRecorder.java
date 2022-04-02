@@ -16,33 +16,132 @@
 
 package com.aws.iot.edgeconnectorforkvs.videorecorder;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.util.concurrent.atomic.AtomicInteger;
+import com.aws.iot.edgeconnectorforkvs.monitor.Monitor;
+import com.aws.iot.edgeconnectorforkvs.monitor.callback.CheckCallback;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.base.VideoRecorderBase;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.callback.AppDataCallback;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.callback.StatusCallback;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.model.CameraType;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.model.ContainerType;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.module.branch.RecorderBranchApp;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.module.branch.RecorderBranchFile;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.module.camera.RecorderCameraRtsp;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.util.Config;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.util.GstDao;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.nio.ByteBuffer;
-
+import org.freedesktop.gstreamer.Pipeline;
 import lombok.NonNull;
 import lombok.Synchronized;
 import lombok.extern.slf4j.Slf4j;
-import org.freedesktop.gstreamer.FlowReturn;
-import org.freedesktop.gstreamer.Sample;
 
 /**
  * Video Recorder Builder class.
  */
 @Slf4j
 public class VideoRecorder extends VideoRecorderBase {
+    class RecorderBranchAppMonitor extends RecorderBranchApp {
+        private static final long MONITOR_PERIOD = Config.APP_PATH_MONITOR_PERIOD;
+        private String monitorSubject;
+        private CheckCallback monitorCheck;
+        private AtomicInteger appCallbackDataCntOld;
+        private AtomicInteger appCallbackDataCntNew;
+
+        RecorderBranchAppMonitor(ContainerType type, GstDao dao, Pipeline pipeline, String subj) {
+            super(type, dao, pipeline);
+            this.monitorSubject = subj;
+            this.appCallbackDataCntNew = new AtomicInteger();
+            this.appCallbackDataCntOld = new AtomicInteger();
+            this.monitorCheck = (monitor, subject, userData) -> {
+                if (this.appCallbackDataCntNew.get() == this.appCallbackDataCntOld.get()) {
+                    willStop(false, String.format("%s doesn't receive new data in %d ms.", subject,
+                            RecorderBranchAppMonitor.MONITOR_PERIOD));
+                } else {
+                    this.appCallbackDataCntOld.set(this.appCallbackDataCntNew.get());
+                    Monitor.getMonitor().add(subject, this.monitorCheck,
+                            RecorderBranchAppMonitor.MONITOR_PERIOD, null);
+                }
+            };
+        }
+
+        @Override
+        protected void onBind() {
+            this.appCallbackDataCntNew.set(0);
+            this.appCallbackDataCntOld.set(0);
+            super.onBind();
+            Monitor.getMonitor().add(this.monitorSubject, this.monitorCheck,
+                    RecorderBranchAppMonitor.MONITOR_PERIOD, null);
+        }
+
+        @Override
+        protected void onUnbind() {
+            Monitor.getMonitor().remove(this.monitorSubject);
+            super.onUnbind();
+        }
+
+        public void increaseAppCallbackDataCnt() {
+            this.appCallbackDataCntNew.incrementAndGet();
+        }
+
+        CheckCallback getMonitorCheck() {
+            return this.monitorCheck;
+        }
+    }
+
+    class RecorderBranchFileMonitor extends RecorderBranchFile {
+        private static final long MONITOR_PERIOD = Config.FILE_PATH_MONITOR_PERIOD;
+        private String monitorSubject;
+        private CheckCallback monitorCheck;
+        private String filePathOld;
+        private String filePathNew;
+
+        RecorderBranchFileMonitor(ContainerType type, GstDao dao, Pipeline pipeline,
+                String filePath, String subj) {
+            super(type, dao, pipeline, filePath);
+
+            this.monitorSubject = subj;
+            this.filePathOld = null;
+            this.filePathNew = null;
+            this.monitorCheck = (monitor, subject, userData) -> {
+                this.filePathNew = this.getCurrentFilePath();
+
+                if (this.filePathOld.equals(this.filePathNew)) {
+                    willStop(false, String.format("%s doesn't rotate files in %d ms.", subject,
+                            RecorderBranchFileMonitor.MONITOR_PERIOD));
+                } else {
+                    this.filePathOld = this.filePathNew;
+                    Monitor.getMonitor().add(subject, this.monitorCheck,
+                            RecorderBranchFileMonitor.MONITOR_PERIOD, null);
+                }
+            };
+        }
+
+        @Override
+        protected void onBind() {
+            this.filePathOld = "";
+            this.filePathNew = "";
+            super.onBind();
+            Monitor.getMonitor().add(this.monitorSubject, this.monitorCheck,
+                    RecorderBranchFileMonitor.MONITOR_PERIOD, null);
+        }
+
+        @Override
+        protected void onUnbind() {
+            Monitor.getMonitor().remove(this.monitorSubject);
+            super.onUnbind();
+        }
+
+        CheckCallback getMonitorCheck() {
+            return this.monitorCheck;
+        }
+    }
+
     private final Object appCallbackBranchLock = new Object[0];
     private final Object appOStreamBranchLock = new Object[0];
-    private RecorderBranchFile fileBranch;
-    private RecorderBranchApp callbackBranch;
-    private RecorderBranchApp streamBranch;
+    private RecorderBranchFileMonitor fileBranch;
+    private RecorderBranchAppMonitor callbackBranch;
+    private RecorderBranchAppMonitor streamBranch;
     private AppDataCallback appCallback;
     private OutputStream appOutputStream;
 
@@ -58,8 +157,10 @@ public class VideoRecorder extends VideoRecorderBase {
 
         if (this.callbackBranch == null) {
             log.warn("App data callback is not registered");
+        } else if (toEnable) {
+            result = this.bindBranch(Config.CALLBACK_PATH);
         } else {
-            result = this.callbackBranch.toggleEmit(toEnable);
+            result = this.unbindBranch(Config.CALLBACK_PATH);
         }
 
         return result;
@@ -78,10 +179,8 @@ public class VideoRecorder extends VideoRecorderBase {
         if (this.callbackBranch == null) {
             log.warn("App data callback is not registered");
         } else {
-            if (!this.callbackBranch.isEmitEnabled()) {
-                synchronized (this.callbackBranch) {
-                    this.appCallback = notifier;
-                }
+            if (!this.callbackBranch.isAutoBind()) {
+                this.appCallback = notifier;
                 result = true;
             } else {
                 log.warn("Callback should be set when toggling off");
@@ -103,8 +202,10 @@ public class VideoRecorder extends VideoRecorderBase {
 
         if (this.streamBranch == null) {
             log.warn("App data OutputStream is not registered");
+        } else if (toEnable) {
+            result = this.bindBranch(Config.OSTREAM_PATH);
         } else {
-            result = this.streamBranch.toggleEmit(toEnable);
+            result = this.unbindBranch(Config.OSTREAM_PATH);
         }
 
         return result;
@@ -123,10 +224,8 @@ public class VideoRecorder extends VideoRecorderBase {
         if (this.streamBranch == null) {
             log.warn("App data OutputStream is not registered");
         } else {
-            if (!this.streamBranch.isEmitEnabled()) {
-                synchronized (this.streamBranch) {
-                    this.appOutputStream = outputStream;
-                }
+            if (!this.streamBranch.isAutoBind()) {
+                this.appOutputStream = outputStream;
                 result = true;
             } else {
                 log.warn("OutputStream should be set when toggling off");
@@ -147,13 +246,13 @@ public class VideoRecorder extends VideoRecorderBase {
         this.streamBranch = null;
     }
 
-    boolean registerCamera(CameraType type, String sourceUrl) {
+    boolean addCameraSource(CameraType type, String sourceUrl) {
         boolean result = false;
 
         if (type == CameraType.RTSP) {
             RecorderCameraRtsp cameraSrc =
                     new RecorderCameraRtsp(this.getGstCore(), this.getPipeline(), sourceUrl);
-            result = this.registerCamera(cameraSrc);
+            result = this.addCameraSource(cameraSrc);
         } else {
             throw new IllegalArgumentException("Unsupported camera source type: " + type);
         }
@@ -163,64 +262,67 @@ public class VideoRecorder extends VideoRecorderBase {
 
     boolean registerFileSink(ContainerType containerType, String recorderFilePath)
             throws IllegalArgumentException {
-        this.fileBranch = new RecorderBranchFile(containerType, this.getGstCore(),
-                this.getPipeline(), recorderFilePath);
+        this.fileBranch = new RecorderBranchFileMonitor(containerType, this.getGstCore(),
+                this.getPipeline(), recorderFilePath, this.recorderName + "_" + Config.FILE_PATH);
 
-        return this.registerBranch(this.fileBranch, Config.FILE_PATH);
+        return this.addBranch(this.fileBranch, Config.FILE_PATH, true);
     }
 
-    boolean setFilePathProperty(String property, Object data) {
-        return this.fileBranch.setProperty(property, data);
+    /**
+     * Set properties to the splitmuxsink in the fileBranch.
+     *
+     * @param property property name
+     * @param data value
+     * @return true if the property is set successfully or anynced
+     */
+    public boolean setFilePathProperty(String property, Object data) {
+        boolean ret = true;
+
+        if (this.fileBranch == null) {
+            log.error("SetProperty fails because file sink is not registered.");
+            ret = false;
+        } else {
+            this.fileBranch.setProperty(property, data);
+        }
+
+        return ret;
     }
 
     @Synchronized("appCallbackBranchLock")
     boolean registerAppDataCallback(ContainerType type, AppDataCallback notifier)
             throws IllegalArgumentException {
-        this.callbackBranch = new RecorderBranchApp(type, this.getGstCore(), this.getPipeline());
+        this.callbackBranch = new RecorderBranchAppMonitor(type, this.getGstCore(),
+                this.getPipeline(), this.recorderName + "_" + Config.CALLBACK_PATH);
         this.appCallback = notifier;
 
-        this.callbackBranch.registerNewSample(sink -> {
-            Sample smp = sink.pullSample();
-            ByteBuffer bBuff = smp.getBuffer().map(false);
-
-            synchronized (this.callbackBranch) {
-                this.appCallback.newSample(this, bBuff);
-            }
-            smp.getBuffer().unmap();
-            smp.dispose();
-
-            return FlowReturn.OK;
+        this.callbackBranch.registerNewSample(bBuff -> {
+            this.callbackBranch.increaseAppCallbackDataCnt();
+            this.appCallback.newSample(this, bBuff);
         });
 
-        return this.registerBranch(this.callbackBranch, Config.CALLBACK_PATH);
+        return this.addBranch(this.callbackBranch, Config.CALLBACK_PATH, false);
     }
 
     @Synchronized("appOStreamBranchLock")
     boolean registerAppDataOutputStream(ContainerType type, OutputStream outputStream)
             throws IllegalArgumentException {
-        this.streamBranch = new RecorderBranchApp(type, this.getGstCore(), this.getPipeline());
+        this.streamBranch = new RecorderBranchAppMonitor(type, this.getGstCore(),
+                this.getPipeline(), this.recorderName + "_" + Config.OSTREAM_PATH);
         this.appOutputStream = outputStream;
 
-        this.streamBranch.registerNewSample(sink -> {
-            Sample smp = sink.pullSample();
-            ByteBuffer bBuff = smp.getBuffer().map(false);
+        this.streamBranch.registerNewSample(bBuff -> {
             byte[] array = new byte[bBuff.remaining()];
 
             bBuff.get(array);
-            synchronized (this.streamBranch) {
-                try {
-                    this.appOutputStream.write(array);
-                    this.appOutputStream.flush();
-                } catch (IOException e) {
-                    log.error("fail to write OutputStream: " + e.getMessage());
-                }
+            try {
+                this.streamBranch.increaseAppCallbackDataCnt();
+                this.appOutputStream.write(array);
+                this.appOutputStream.flush();
+            } catch (IOException e) {
+                log.error("fail to write OutputStream: {}.", e.getMessage());
             }
-            smp.getBuffer().unmap();
-            smp.dispose();
-
-            return FlowReturn.OK;
         });
 
-        return this.registerBranch(this.streamBranch, Config.OSTREAM_PATH);
+        return this.addBranch(this.streamBranch, Config.OSTREAM_PATH, false);
     }
 }

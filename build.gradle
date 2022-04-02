@@ -20,11 +20,11 @@ plugins {
 
   // SpotBugs for static analysis to look for bugs in Java code. Read more at:
   // https://plugins.gradle.org/plugin/com.github.spotbugs
-  id "com.github.spotbugs" version "4.7.9"
+  id "com.github.spotbugs" version "5.0.6"
 
   // Gradle Shadow creating fat/uber JARs with support for package relocation. Read more at:
   // https://plugins.gradle.org/plugin/com.github.johnrengelman.shadow
-  id "com.github.johnrengelman.shadow" version "6.1.0"
+  id "com.github.johnrengelman.shadow" version "7.1.2"
 }
 
 version = '1.0'
@@ -34,6 +34,17 @@ sourceCompatibility = 1.8
 buildDir = 'build'
 
 mainClassName = 'com.aws.iot.edgeconnectorforkvs.EdgeConnectorForKVSService'
+
+tasks.withType(JavaCompile).configureEach {
+    //options.compilerArgs << '-Xlint:unchecked'
+    options.deprecation = true
+    options.fork = true
+    options.incremental = true
+}
+
+tasks.withType(Test).configureEach {
+    maxParallelForks = Runtime.runtime.availableProcessors().intdiv(2) ?: 1
+}
 
 /*
  Configures the JUnit5
@@ -163,30 +174,30 @@ dependencies {
   implementation fileTree(dir: 'libs', include: ['*.jar'])
 
   // Compile
-  implementation group: 'com.amazonaws', name: 'amazon-kinesis-video-streams-parser-library', version: '1.0.15'
-  implementation group: 'com.amazonaws', name: 'aws-java-sdk-greengrassv2', version: '1.12.111'
+  implementation group: 'com.amazonaws', name: 'amazon-kinesis-video-streams-parser-library', version: '1.2.4'
+  implementation group: 'com.amazonaws', name: 'aws-java-sdk-greengrassv2', version: '1.12.186'
   implementation group: 'net.java.dev.jna', name: 'jna', version: '5.10.0'
   implementation group: 'net.java.dev.jna', name: 'jna-platform', version: '5.10.0'
   implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.12.0'
-  implementation group: 'org.apache.logging.log4j', name: 'log4j-api', version: '2.17.1'
-  implementation group: 'org.apache.logging.log4j', name: 'log4j-core', version: '2.17.1'
+  implementation group: 'org.apache.logging.log4j', name: 'log4j-api', version: '2.17.2'
+  implementation group: 'org.apache.logging.log4j', name: 'log4j-core', version: '2.17.2'
   implementation group: 'org.freedesktop.gstreamer', name: 'gst1-java-core', version: '1.4.0'
   implementation group: 'org.quartz-scheduler', name: 'quartz', version: '2.3.2'
-  implementation group: 'org.slf4j', name: 'slf4j-api', version: '1.7.32'
-  implementation group: 'software.amazon.awssdk', name: 'greengrassv2', version: '2.17.82'
-  implementation group: 'software.amazon.awssdk', name: 'iotsitewise', version: '2.17.82'
-  implementation group: 'software.amazon.awssdk', name: 'secretsmanager', version: '2.17.82'
-  implementation group: 'software.amazon.awssdk.crt', name: 'aws-crt', version: '0.15.9'
-  implementation group: 'software.amazon.awssdk.iotdevicesdk', name: 'aws-iot-device-sdk', version: '1.5.4'
+  implementation group: 'org.slf4j', name: 'slf4j-api', version: '1.7.36'
+  implementation group: 'software.amazon.awssdk', name: 'greengrassv2', version: '2.17.157'
+  implementation group: 'software.amazon.awssdk', name: 'iotsitewise', version: '2.17.157'
+  implementation group: 'software.amazon.awssdk', name: 'secretsmanager', version: '2.17.157'
+  implementation group: 'software.amazon.awssdk.crt', name: 'aws-crt', version: '0.16.0'
+  implementation group: 'software.amazon.awssdk.iotdevicesdk', name: 'aws-iot-device-sdk', version: '1.7.1'
 
   // Test
-  testImplementation group: 'org.junit.jupiter', name: 'junit-jupiter-api', version: '5.8.1'
-  testRuntimeOnly group: 'org.junit.jupiter', name: 'junit-jupiter-engine', version: '5.8.1'
-  testImplementation group: 'org.mockito', name: 'mockito-core', version: '4.0.0'
-  testImplementation group: 'org.mockito', name: 'mockito-inline', version: '4.0.0'
-  testImplementation group: 'org.mockito', name: 'mockito-junit-jupiter', version: '4.0.0'
-  testImplementation group: 'org.slf4j', name: 'slf4j-simple', version: '1.7.32'
-  testImplementation group: 'uk.org.webcompere', name: 'system-stubs-jupiter', version: '1.2.0'
+  testImplementation group: 'org.junit.jupiter', name: 'junit-jupiter-api', version: '5.8.2'
+  testRuntimeOnly group: 'org.junit.jupiter', name: 'junit-jupiter-engine', version: '5.8.2'
+  testImplementation group: 'org.mockito', name: 'mockito-core', version: '4.4.0'
+  testImplementation group: 'org.mockito', name: 'mockito-inline', version: '4.4.0'
+  testImplementation group: 'org.mockito', name: 'mockito-junit-jupiter', version: '4.4.0'
+  testImplementation group: 'org.slf4j', name: 'slf4j-simple', version: '1.7.36'
+  testImplementation group: 'uk.org.webcompere', name: 'system-stubs-jupiter', version: '2.0.1'
 }
 
 // generate an uber jar

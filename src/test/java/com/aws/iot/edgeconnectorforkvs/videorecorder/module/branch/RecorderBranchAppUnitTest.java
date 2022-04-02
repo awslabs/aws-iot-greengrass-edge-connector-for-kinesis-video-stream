@@ -14,13 +14,18 @@
  * limitations under the License.
  */
 
-package com.aws.iot.edgeconnectorforkvs.videorecorder;
+package com.aws.iot.edgeconnectorforkvs.videorecorder.module.branch;
 
+import static org.mockito.BDDMockito.*;
+import java.nio.ByteBuffer;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.model.ContainerType;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.module.branch.RecorderBranchApp.BranchAppCallback;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.util.GstDao;
-import org.freedesktop.gstreamer.FlowReturn;
+import org.freedesktop.gstreamer.Buffer;
+import org.freedesktop.gstreamer.Pad;
 import org.freedesktop.gstreamer.Pipeline;
-import org.freedesktop.gstreamer.elements.AppSink.NEW_SAMPLE;
+import org.freedesktop.gstreamer.Sample;
+import org.freedesktop.gstreamer.elements.AppSink;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,32 +39,16 @@ public class RecorderBranchAppUnitTest {
     @Mock
     private Pipeline mockPipeline;
 
+    private AppSink.NEW_SAMPLE appsNewSampleListener;
+
     @Test
     void createBranchAppTest_toggleEmitSignal_noException() {
         RecorderBranchApp branch =
                 new RecorderBranchApp(ContainerType.MATROSKA, this.mockGst, this.mockPipeline);
-        NEW_SAMPLE listener = sink -> {
-            return FlowReturn.OK;
+        BranchAppCallback listener = bBuf -> {
         };
 
         branch.registerNewSample(listener);
-        Assertions.assertFalse(branch.isEmitEnabled());
-
-        // Already disabled
-        Assertions.assertFalse(branch.toggleEmit(false));
-        Assertions.assertFalse(branch.isEmitEnabled());
-
-        // From disabled to enabled
-        Assertions.assertTrue(branch.toggleEmit(true));
-        Assertions.assertTrue(branch.isEmitEnabled());
-
-        // Already enabled
-        Assertions.assertFalse(branch.toggleEmit(true));
-        Assertions.assertTrue(branch.isEmitEnabled());
-
-        // From enabled to disabled
-        Assertions.assertTrue(branch.toggleEmit(false));
-        Assertions.assertFalse(branch.isEmitEnabled());
     }
 
     @Test
@@ -68,35 +57,51 @@ public class RecorderBranchAppUnitTest {
                 new RecorderBranchApp(ContainerType.MATROSKA, this.mockGst, this.mockPipeline);
         RecorderBranchApp branch2 =
                 new RecorderBranchApp(ContainerType.MATROSKA, this.mockGst, this.mockPipeline);
-        NEW_SAMPLE listener = sink -> {
-            return FlowReturn.OK;
+        BranchAppCallback listener = bBuf -> {
         };
 
         branch1.registerNewSample(listener);
         branch2.registerNewSample(listener);
 
         // bind then attach
-        branch1.bindPaths(null, null);
-        Assertions.assertTrue(branch1.toggleEmit(true));
-        Assertions.assertTrue(branch1.isEmitEnabled());
+        AppSink mockGstAppSink = mock(AppSink.class);
+        Sample mockGstSample = mock(Sample.class);
+        Buffer mockGstBuffer = mock(Buffer.class);
+        ByteBuffer byteBuffer = null;
+
+        willAnswer(invocation -> {
+            appsNewSampleListener = invocation.getArgument(1);
+            return null;
+        }).given(mockGst).connectAppSink(any(), any(AppSink.NEW_SAMPLE.class));
+        willReturn(mockGstSample).given(mockGstAppSink).pullSample();
+        willReturn(mockGstBuffer).given(mockGstSample).getBuffer();
+        willReturn(byteBuffer).given(mockGstBuffer).map(any(Boolean.class));
+        branch1.bind(null, null);
+        appsNewSampleListener.newSample(mockGstAppSink);
+        willReturn(null).given(mockGstAppSink).pullSample();
+        appsNewSampleListener.newSample(mockGstAppSink);
+        branch1.unbind();
+        appsNewSampleListener.newSample(mockGstAppSink);
+        branch1.bind(null, null);
+        branch1.unbind();
 
         // attach then bind
-        Assertions.assertTrue(branch2.toggleEmit(true));
-        branch2.bindPaths(null, null);
-        Assertions.assertTrue(branch2.isEmitEnabled());
+        branch2.bind(null, null);
+        branch2.unbind();
 
         // reattach
-        Assertions.assertTrue(branch2.toggleEmit(false));
-        Assertions.assertTrue(branch2.toggleEmit(true));
-        Assertions.assertTrue(branch2.isEmitEnabled());
+        // branch2.bind(null, null);
     }
 
     @Test
     void getPadTest_invokeMethod_noException() {
+        Pad mockPad = mock(Pad.class);
         RecorderBranchApp branch =
                 new RecorderBranchApp(ContainerType.MATROSKA, this.mockGst, this.mockPipeline);
 
         Assertions.assertDoesNotThrow(() -> branch.getEntryAudioPad());
         Assertions.assertDoesNotThrow(() -> branch.getEntryVideoPad());
+        Assertions.assertDoesNotThrow(() -> branch.relEntryAudioPad(mockPad));
+        Assertions.assertDoesNotThrow(() -> branch.relEntryVideoPad(mockPad));
     }
 }

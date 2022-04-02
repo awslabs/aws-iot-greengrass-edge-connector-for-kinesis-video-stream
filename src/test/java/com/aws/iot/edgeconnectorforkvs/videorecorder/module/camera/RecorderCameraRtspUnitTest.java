@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
-package com.aws.iot.edgeconnectorforkvs.videorecorder;
+package com.aws.iot.edgeconnectorforkvs.videorecorder.module.camera;
 
 import static org.mockito.BDDMockito.*;
-import com.aws.iot.edgeconnectorforkvs.videorecorder.RecorderCameraRtsp.SdpCallback;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.base.RecorderCameraBase.CapabilityListener;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.base.RecorderCameraBase.ErrorListener;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.base.RecorderCameraBase.NewPadListener;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.module.camera.RecorderCameraRtsp.SdpCallback;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.util.GstDao;
-import com.aws.iot.edgeconnectorforkvs.videorecorder.base.RecorderCameraBase;
 import org.freedesktop.gstreamer.Caps;
 import org.freedesktop.gstreamer.Element;
 import org.freedesktop.gstreamer.Pad;
@@ -56,9 +58,9 @@ public class RecorderCameraRtspUnitTest {
     @Mock
     private Structure mockProp;
 
-    private RecorderCameraBase.CapabilityListener capListener;
-    private RecorderCameraBase.NewPadListener padListener;
-    private RecorderCameraBase.ErrorListener errListener;
+    private CapabilityListener capListener;
+    private NewPadListener padListener;
+    private ErrorListener errListener;
     private SdpCallback sdpListener;
     private Element.PAD_ADDED padAddListener;
 
@@ -82,16 +84,26 @@ public class RecorderCameraRtspUnitTest {
             this.padAddListener = invocation.getArgument(1);
             return null;
         }).given(this.mockGst).connectElement(any(), any(Element.PAD_ADDED.class));
+
+        willReturn(mockRtsp).given(mockGst).newElement(eq("rtspsrc"));
     }
 
     @Test
     void onSdpTest_invokeSdpListener_noException() {
+        willDoNothing().given(this.mockGst).setElement(any(), anyString(), any());
+        willThrow(new IllegalArgumentException()).given(this.mockGst).setElement(any(),
+                eq("invalid_property"), any());
+
         RecorderCameraRtsp camera =
                 new RecorderCameraRtsp(this.mockGst, this.mockPipeline, RTSP_URL);
 
+        Assertions.assertDoesNotThrow(() -> camera.setProperty("invalid_property", 0));
         Assertions.assertDoesNotThrow(() -> camera.setProperty("location", RTSP_URL));
+        camera.onBind();
         Assertions.assertDoesNotThrow(() -> camera.registerListener(this.capListener,
                 this.padListener, this.errListener));
+        Assertions.assertDoesNotThrow(() -> camera.setProperty("location", RTSP_URL));
+        Assertions.assertDoesNotThrow(() -> camera.setProperty("invalid_property", 0));
 
         // RTSP contains both video and audio
         willReturn("m=audio\nm=video").given(this.mockSdp).toString();
@@ -112,6 +124,8 @@ public class RecorderCameraRtspUnitTest {
         willReturn("").given(this.mockSdp).toString();
         Assertions.assertDoesNotThrow(
                 () -> this.sdpListener.callback(this.mockRtsp, this.mockSdp, null));
+
+        camera.onUnbind();
     }
 
     @Test
@@ -123,6 +137,7 @@ public class RecorderCameraRtspUnitTest {
         RecorderCameraRtsp camera =
                 new RecorderCameraRtsp(this.mockGst, this.mockPipeline, RTSP_URL);
         camera.registerListener(this.capListener, this.padListener, this.errListener);
+        camera.onBind();
 
         // Test: not x-rtp
         willReturn(NRTP_CAP).given(this.mockGst).getStructureName(eq(this.mockProp));
@@ -158,6 +173,8 @@ public class RecorderCameraRtspUnitTest {
                 eq("media"));
         Assertions.assertDoesNotThrow(
                 () -> this.padAddListener.padAdded(this.mockRtsp, this.mockPad));
+
+        camera.onUnbind();
     }
 
     @Test
@@ -177,6 +194,7 @@ public class RecorderCameraRtspUnitTest {
         RecorderCameraRtsp camera =
                 new RecorderCameraRtsp(this.mockGst, this.mockPipeline, RTSP_URL);
         camera.registerListener(this.capListener, this.padListener, this.errListener);
+        camera.onBind();
 
         // Test not linked yet
         willReturn(false).given(this.mockGst).isPadLinked(eq(this.mockPad));
@@ -193,6 +211,8 @@ public class RecorderCameraRtspUnitTest {
         willReturn(true).given(this.mockGst).isPadLinked(eq(this.mockPad));
         Assertions.assertDoesNotThrow(
                 () -> this.padAddListener.padAdded(this.mockRtsp, this.mockPad));
+
+        camera.onUnbind();
     }
 
     @Test
@@ -212,11 +232,14 @@ public class RecorderCameraRtspUnitTest {
         RecorderCameraRtsp camera =
                 new RecorderCameraRtsp(this.mockGst, this.mockPipeline, RTSP_URL);
         camera.registerListener(this.capListener, this.padListener, this.errListener);
+        camera.onBind();
 
         // Test not linked yet
         willReturn(false).given(this.mockGst).isPadLinked(eq(this.mockPad));
         Assertions.assertDoesNotThrow(
                 () -> this.padAddListener.padAdded(this.mockRtsp, this.mockPad));
+
+        camera.onUnbind();
     }
 
     @Test
@@ -236,6 +259,7 @@ public class RecorderCameraRtspUnitTest {
         RecorderCameraRtsp camera =
                 new RecorderCameraRtsp(this.mockGst, this.mockPipeline, RTSP_URL);
         camera.registerListener(this.capListener, this.padListener, this.errListener);
+        camera.onBind();
 
         // Test not linked yet
         willReturn(false).given(this.mockGst).isPadLinked(eq(this.mockPad));
@@ -252,6 +276,8 @@ public class RecorderCameraRtspUnitTest {
         willReturn(true).given(this.mockGst).isPadLinked(eq(this.mockPad));
         Assertions.assertDoesNotThrow(
                 () -> this.padAddListener.padAdded(this.mockRtsp, this.mockPad));
+
+        camera.onUnbind();
     }
 
     @Test
@@ -269,6 +295,7 @@ public class RecorderCameraRtspUnitTest {
         RecorderCameraRtsp camera =
                 new RecorderCameraRtsp(this.mockGst, this.mockPipeline, RTSP_URL);
         camera.registerListener(this.capListener, this.padListener, this.errListener);
+        camera.onBind();
 
         // Test: x-rtp, video, unsupported encode
         willReturn("video").given(this.mockGst).getStructureString(eq(this.mockProp), eq("media"));
@@ -279,5 +306,7 @@ public class RecorderCameraRtspUnitTest {
         willReturn("audio").given(this.mockGst).getStructureString(eq(this.mockProp), eq("media"));
         Assertions.assertDoesNotThrow(
                 () -> this.padAddListener.padAdded(this.mockRtsp, this.mockPad));
+
+        camera.onUnbind();
     }
 }

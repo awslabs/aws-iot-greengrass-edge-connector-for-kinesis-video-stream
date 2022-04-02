@@ -21,8 +21,8 @@ public class StatusCallbackImplTest {
         //when
         ExecutorService recorderService = Executors.newSingleThreadExecutor();
         VideoRecorderBase videoRecorderBase = mock(VideoRecorderBase.class);
-        doNothing().when(videoRecorderBase).stopRecording();
-        doNothing().when(videoRecorderBase).startRecording();
+        doNothing().when(videoRecorderBase).stop();
+        doNothing().when(videoRecorderBase).start();
         Pipeline pipeline = mock(Pipeline.class);
         when(videoRecorderBase.getPipeline()).thenReturn(pipeline);
 
@@ -35,7 +35,7 @@ public class StatusCallbackImplTest {
         statusCallback.notifyStatus(videoRecorderBase, RecorderStatus.FAILED, "");
         //verify
         Thread.sleep(1000);
-        verify(videoRecorderBase, times(1)).stopRecording();
+        verify(videoRecorderBase, times(1)).stop();
     }
 
     @Test
@@ -54,6 +54,6 @@ public class StatusCallbackImplTest {
         StatusCallback statusCallback = new StatusCallbackImpl(edgeConnectorForKVSConfiguration, recorderService);
         statusCallback.notifyStatus(videoRecorderBase, RecorderStatus.STARTED, "");
         //verify
-        verify(videoRecorderBase, times(0)).stopRecording();
+        verify(videoRecorderBase, times(0)).stop();
     }
 }

@@ -20,7 +20,7 @@ import com.aws.iot.edgeconnectorforkvs.videorecorder.base.VideoRecorderBase;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.model.RecorderStatus;
 
 /**
- * Basic Callback for receiving status changes.
+ * Callback for receiving status changes.
  */
 public interface StatusCallback {
     /**

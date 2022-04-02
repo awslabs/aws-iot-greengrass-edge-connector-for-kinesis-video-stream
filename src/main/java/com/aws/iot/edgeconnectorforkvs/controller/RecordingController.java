@@ -65,7 +65,7 @@ public class RecordingController {
                 VideoRecorderBuilder builder = getVideoRecorderBuilder(edgeConnectorForKVSConfiguration,
                         recorderService);
                 PipedOutputStream outputStream = new PipedOutputStream();
-                builder.registerCamera(CameraType.RTSP, edgeConnectorForKVSConfiguration.getRtspStreamURL());
+                builder.addCameraSource(CameraType.RTSP, edgeConnectorForKVSConfiguration.getRtspStreamURL());
                 builder.registerFileSink(ContainerType.MATROSKA,
                         edgeConnectorForKVSConfiguration.getVideoRecordFolderPath().toString() +
                                 VIDEO_FILENAME_PREFIX_WITH_OUT_UNDERLINE);
@@ -90,7 +90,7 @@ public class RecordingController {
 
         if (videoRecorder != null) {
             log.info("Start recording for " + edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
-            videoRecorder.startRecording();
+            videoRecorder.start();
         } else {
             log.error("Fail to init recorder for " + edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
             edgeConnectorForKVSConfiguration.getFatalStatus().set(true);
@@ -124,7 +124,7 @@ public class RecordingController {
                 log.info("Recorder Requests Count is 0. Stopping.");
                 int maxRetry = 5;
                 while (!videoRecorder.getStatus().equals(RecorderStatus.STOPPED)) {
-                    videoRecorder.stopRecording();
+                    videoRecorder.stop();
                     if (maxRetry > 0) {
                         maxRetry--;
                     } else {
