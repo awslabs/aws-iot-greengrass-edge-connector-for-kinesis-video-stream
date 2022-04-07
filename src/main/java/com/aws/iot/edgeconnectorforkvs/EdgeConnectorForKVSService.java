@@ -50,6 +50,7 @@ import com.aws.iot.edgeconnectorforkvs.handler.VideoUploadRequestHandler;
 import com.aws.iot.edgeconnectorforkvs.model.EdgeConnectorForKVSConfiguration;
 import com.aws.iot.edgeconnectorforkvs.model.exceptions.EdgeConnectorForKVSException;
 import com.aws.iot.edgeconnectorforkvs.model.exceptions.EdgeConnectorForKVSUnrecoverableException;
+import com.aws.iot.edgeconnectorforkvs.monitor.Monitor;
 import com.aws.iot.edgeconnectorforkvs.scheduler.JobScheduler;
 import com.aws.iot.edgeconnectorforkvs.scheduler.SchedulerCallback;
 import com.aws.iot.edgeconnectorforkvs.util.Constants;
@@ -434,6 +435,10 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
         boolean retry = true;
         boolean isInitialSetup = true;
         List<String> restartNeededConfigurationList = new ArrayList<>();
+
+        // Start monitor
+        Monitor.getMonitor().start();
+
         do {
             hubSiteWiseAssetId = args[Constants.ARG_INDEX_SITE_WISE_ASSET_ID_FOR_HUB];
             // For windows, we need to remove leading quote and trailing quote
@@ -508,6 +513,8 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
                     restartNeededConfigurationList.clear();
                     clearFatalStatus();
                     isInitialSetup = true;
+                    // Clean monitor because all configurations are cleaned up
+                    Monitor.getMonitor().cleanTasks();
                 } else {
                     log.info("---------- Camera Re-starting ----------");
                     // wait for a bit before restarting
@@ -515,5 +522,8 @@ public class EdgeConnectorForKVSService implements SchedulerCallback {
                 Thread.sleep(WAIT_TIME_BEFORE_RESTART_IN_MILLISECS);
             }
         } while (retry);
+
+        // Stop monitor
+        Monitor.getMonitor().stop();
     }
 }
