@@ -18,6 +18,7 @@ package com.aws.iot.edgeconnectorforkvs.videouploader.mkv;
 import com.amazonaws.kinesisvideo.parser.ebml.InputStreamParserByteSource;
 import com.amazonaws.kinesisvideo.parser.mkv.MkvElementVisitException;
 import com.amazonaws.kinesisvideo.parser.mkv.StreamingMkvReader;
+import com.aws.iot.edgeconnectorforkvs.videouploader.model.MkvStatistics;
 import com.aws.iot.edgeconnectorforkvs.videouploader.visitors.MergeFragmentVisitor;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -31,7 +32,7 @@ import java.io.InputStream;
  * A MKV input stream that support time ordering elements.
  */
 @Slf4j
-public class MkvInputStream extends InputStream {
+public class MkvInputStream extends InputStream implements MkvStats {
 
     private final ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
 
@@ -43,6 +44,8 @@ public class MkvInputStream extends InputStream {
     private final StreamingMkvReader streamingMkvReader;
 
     private boolean isClosed = false;
+
+    private final MkvStatistics stats = MkvStatistics.builder().build();
 
     /**
      * Constructor of MKV input stream.
@@ -87,6 +90,7 @@ public class MkvInputStream extends InputStream {
     @Override
     public int read() {
         if (available() >= 0) {
+            stats.setMkvSinkReadCnt(stats.getMkvSinkReadCnt() + 1);
             return byteArrayInputStream.read();
         } else {
             return -1;
@@ -96,6 +100,7 @@ public class MkvInputStream extends InputStream {
     @Override
     public int read(byte[] b, int off, int len) {
         if (available() >= 0) {
+            stats.setMkvSinkReadCnt(stats.getMkvSinkReadCnt() + len);
             return byteArrayInputStream.read(b, off, len);
         } else {
             return -1;
@@ -116,6 +121,10 @@ public class MkvInputStream extends InputStream {
 
             if (byteArrayOutputStream.size() > 0) {
                 byteArrayInputStream = new ByteArrayInputStream(byteArrayOutputStream.toByteArray());
+
+                // The count here is the byte count after MKV parser parsed. It means we may get fewer bytes if there
+                // are un-recognizable MKV fields.
+                stats.setMkvSrcReadCnt(stats.getMkvSrcReadCnt() + byteArrayOutputStream.size());
             } else {
                 log.debug("No data available from input stream");
             }
@@ -136,5 +145,10 @@ public class MkvInputStream extends InputStream {
                 byteArrayInputStream = null;
             }
         }
+    }
+
+    @Override
+    public MkvStatistics getStats() {
+        return stats.toBuilder().build();
     }
 }

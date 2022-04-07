@@ -18,6 +18,7 @@ package com.aws.iot.edgeconnectorforkvs.videouploader.mkv;
 import com.amazonaws.kinesisvideo.parser.ebml.InputStreamParserByteSource;
 import com.amazonaws.kinesisvideo.parser.mkv.MkvElementVisitException;
 import com.amazonaws.kinesisvideo.parser.mkv.StreamingMkvReader;
+import com.aws.iot.edgeconnectorforkvs.videouploader.model.MkvStatistics;
 import com.aws.iot.edgeconnectorforkvs.videouploader.model.VideoFile;
 import com.aws.iot.edgeconnectorforkvs.videouploader.model.exceptions.MergeFragmentException;
 import com.aws.iot.edgeconnectorforkvs.videouploader.visitors.MergeFragmentVisitor;
@@ -37,7 +38,7 @@ import java.util.ListIterator;
  * A MKV input stream that support time ordering elements and merging 2 different MKV files.
  */
 @Slf4j
-public class MkvFilesInputStream extends InputStream {
+public class MkvFilesInputStream extends InputStream implements MkvStats {
 
     private final ListIterator<VideoFile> mkvIterator;
 
@@ -50,6 +51,8 @@ public class MkvFilesInputStream extends InputStream {
     private Date mkvStartTime = null;
 
     private boolean isClosed = false;
+
+    private final MkvStatistics stats = MkvStatistics.builder().build();
 
     /**
      * Constructor of MKV files input stream.
@@ -94,6 +97,7 @@ public class MkvFilesInputStream extends InputStream {
     @Override
     public int read() {
         if (available() >= 0) {
+            stats.setMkvSinkReadCnt(stats.getMkvSinkReadCnt() + 1);
             return byteArrayInputStream.read();
         } else {
             return -1;
@@ -103,6 +107,7 @@ public class MkvFilesInputStream extends InputStream {
     @Override
     public int read(byte[] b, int off, int len) {
         if (available() >= 0) {
+            stats.setMkvSinkReadCnt(stats.getMkvSinkReadCnt() + len);
             return byteArrayInputStream.read(b, off, len);
         } else {
             return -1;
@@ -141,6 +146,7 @@ public class MkvFilesInputStream extends InputStream {
 
                 if (byteArrayOutputStream.size() > 0) {
                     byteArrayInputStream = new ByteArrayInputStream(byteArrayOutputStream.toByteArray());
+                    stats.setMkvSrcReadCnt(stats.getMkvSrcReadCnt() + byteArrayOutputStream.size());
                 } else {
                     log.info("File: {} doesn't contain any video data, skip merging.", mkvFile.getAbsolutePath());
                     closeMkvInputStream();
@@ -187,5 +193,10 @@ public class MkvFilesInputStream extends InputStream {
                 byteArrayInputStream = null;
             }
         }
+    }
+
+    @Override
+    public MkvStatistics getStats() {
+        return stats.toBuilder().build();
     }
 }
