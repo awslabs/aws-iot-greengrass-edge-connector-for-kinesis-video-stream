@@ -19,6 +19,7 @@ import com.amazonaws.kinesisvideo.parser.mkv.MkvElementVisitException;
 import com.amazonaws.kinesisvideo.parser.mkv.MkvStartMasterElement;
 import com.amazonaws.kinesisvideo.parser.mkv.StreamingMkvReader;
 import com.aws.iot.edgeconnectorforkvs.videouploader.TestUtil;
+import com.aws.iot.edgeconnectorforkvs.videouploader.model.MkvStatistics;
 import com.aws.iot.edgeconnectorforkvs.videouploader.model.VideoFile;
 import com.aws.iot.edgeconnectorforkvs.videouploader.visitors.MergeFragmentVisitor;
 import org.junit.jupiter.api.Assertions;
@@ -360,5 +361,38 @@ public class MkvFilesInputStreamTest {
             System.out.println("Unable to create sample video");
         }
         return null;
+    }
+
+    @Test
+    public void getStats_validSampleVideo_correctSrcAndSinkCnt() {
+        Assumptions.assumeTrue(isVideoFilesAvailable);
+        MkvStatistics stats;
+
+        // Create input
+        final List<VideoFile> filesToMerge = new ArrayList<>();
+        filesToMerge.add(new VideoFile(tempVideoPath1.toFile()));
+        filesToMerge.add(new VideoFile(tempVideoPath2.toFile()));
+
+        // Do test
+        mkvInputStream = new MkvFilesInputStream(filesToMerge.listIterator());
+        stats = mkvInputStream.getStats();
+        Assertions.assertEquals(stats.getMkvSrcReadCnt(), 0);
+        Assertions.assertEquals(stats.getMkvSinkReadCnt(), 0);
+
+        mkvInputStream.available();
+        stats = mkvInputStream.getStats();
+        Assertions.assertEquals(stats.getMkvSrcReadCnt(), 126);
+        Assertions.assertEquals(stats.getMkvSinkReadCnt(), 0);
+
+        mkvInputStream.read();
+        stats = mkvInputStream.getStats();
+        Assertions.assertEquals(stats.getMkvSrcReadCnt(), 126);
+        Assertions.assertEquals(stats.getMkvSinkReadCnt(), 1);
+
+        byte[] tempBuf = new byte[10];
+        mkvInputStream.read(tempBuf, 0, 10);
+        stats = mkvInputStream.getStats();
+        Assertions.assertEquals(stats.getMkvSrcReadCnt(), 126);
+        Assertions.assertEquals(stats.getMkvSinkReadCnt(), 11);
     }
 }

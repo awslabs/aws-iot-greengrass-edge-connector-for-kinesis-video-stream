@@ -29,11 +29,15 @@ import com.amazonaws.services.kinesisvideo.model.FragmentTimecodeType;
 import com.amazonaws.services.kinesisvideo.model.GetDataEndpointRequest;
 import com.amazonaws.services.kinesisvideo.model.PutMediaRequest;
 
+import com.aws.iot.edgeconnectorforkvs.monitor.Monitor;
+import com.aws.iot.edgeconnectorforkvs.monitor.callback.CheckCallback;
 import com.aws.iot.edgeconnectorforkvs.util.Constants;
 import com.aws.iot.edgeconnectorforkvs.util.VideoRecordVisitor;
 import com.aws.iot.edgeconnectorforkvs.videouploader.callback.UploadCallBack;
 import com.aws.iot.edgeconnectorforkvs.videouploader.mkv.MkvFilesInputStream;
 import com.aws.iot.edgeconnectorforkvs.videouploader.mkv.MkvInputStream;
+import com.aws.iot.edgeconnectorforkvs.videouploader.mkv.MkvStats;
+import com.aws.iot.edgeconnectorforkvs.videouploader.model.MkvStatistics;
 import com.aws.iot.edgeconnectorforkvs.videouploader.model.VideoFile;
 import com.aws.iot.edgeconnectorforkvs.videouploader.model.exceptions.KvsStreamingException;
 import com.aws.iot.edgeconnectorforkvs.videouploader.model.exceptions.VideoUploaderException;
@@ -49,16 +53,19 @@ import java.util.Date;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Client implementation class for the use of {@link AmazonKinesisVideoPutMedia}. To create, obtain an instance of the
  * builder via builder() and call build() after configuring desired options.
  */
 @Slf4j
-public class VideoUploaderClient implements VideoUploader {
+public class VideoUploaderClient implements VideoUploader, CheckCallback {
 
     /* Default connection timeout of put media data endpoint. */
     private static final int CONNECTION_TIMEOUT_IN_MILLIS = 10_000;
+
+    private static final long MKV_STATS_PERIODICAL_CHECK_TIME = TimeUnit.MINUTES.toMillis(1);
 
     /* AWS credentials provider to use. */
     private AWSCredentialsProvider awsCredentialsProvider;
@@ -93,6 +100,12 @@ public class VideoUploaderClient implements VideoUploader {
     private CountDownLatch putMediaLatch;
 
     private KvsStreamingException lastKvsStreamingException = null;
+
+    /* MKV stats provided by either MkvInputStream or MkvFilesInputStream. */
+    private MkvStats mkvStats = null;
+
+    /* MKV statistics comes from either MkvInputStream or MkvFilesInputStream. */
+    private MkvStatistics mkvStatistics = MkvStatistics.builder().build();
 
     /**
      * The factory creator of VideoUploaderClient.
@@ -142,7 +155,14 @@ public class VideoUploaderClient implements VideoUploader {
         }
 
         taskStart();
+
+        Monitor.getMonitor().add(getUploadHistoricalVideoSubject(), this, MKV_STATS_PERIODICAL_CHECK_TIME, this);
+
         doUploadHistoricalVideo(videoUploadingStartTime, videoUploadingEndTime, statusChangedCallBack, uploadCallBack);
+
+        Monitor.getMonitor().remove(getUploadHistoricalVideoSubject());
+        mkvStats = null;
+
         taskEnd();
     }
 
@@ -168,6 +188,9 @@ public class VideoUploaderClient implements VideoUploader {
             }
             MkvFilesInputStream mkvFilesInputStream = new MkvFilesInputStream(filesToUpload);
             filesToUpload.previous();
+
+            mkvStats = mkvFilesInputStream;
+
             doUploadStream(mkvFilesInputStream, videoStartTime, statusChangedCallBack, uploadCallBack);
         }
 
@@ -191,7 +214,17 @@ public class VideoUploaderClient implements VideoUploader {
                              Runnable statusChangedCallBack, UploadCallBack uploadCallBack)
             throws KvsStreamingException {
         taskStart();
-        doUploadStream(new MkvInputStream(inputStream), videoUploadingStartTime, statusChangedCallBack, uploadCallBack);
+
+        MkvInputStream mkvInputStream = new MkvInputStream(inputStream);
+
+        mkvStats = mkvInputStream;
+        Monitor.getMonitor().add(getUploadLiveVideoSubject(), this, MKV_STATS_PERIODICAL_CHECK_TIME, this);
+
+        doUploadStream(mkvInputStream, videoUploadingStartTime, statusChangedCallBack, uploadCallBack);
+
+        Monitor.getMonitor().remove(getUploadLiveVideoSubject());
+        mkvStats = null;
+
         taskEnd();
     }
 
@@ -356,5 +389,43 @@ public class VideoUploaderClient implements VideoUploader {
 
     private void updateUploadCallbackStatus(UploadCallBack uploadCallBack, AckEvent event) {
         uploadCallBack.addPersistedFragmentTimecode(event.getFragmentTimecode());
+    }
+
+    /**
+     * Check if MKV statistics changed during streaming. If the statistics doesn't change in this callback, it'll
+     * consider it as an error and close the connection.
+     *
+     * @param monitor The monitor in use
+     * @param subject Current subject
+     * @param userData User data
+     */
+    @Override
+    public void check(Monitor monitor, String subject, Object userData) {
+        MkvStatistics latestMkvStatistics;
+        if (mkvStats != null && (latestMkvStatistics = mkvStats.getStats()) != null) {
+            if (latestMkvStatistics.equals(mkvStatistics)) {
+                log.error("MKV stats unchanged, old src cnt {}, new src cnt {}, old sink cnt {}, new sink cnt {}",
+                        mkvStatistics.getMkvSrcReadCnt(), latestMkvStatistics.getMkvSrcReadCnt(),
+                        mkvStatistics.getMkvSinkReadCnt(), latestMkvStatistics.getMkvSinkReadCnt());
+
+                // We should try to break connection here
+                lastKvsStreamingException = new KvsStreamingException("MKV data stall");
+                this.close();
+            }
+            mkvStatistics = latestMkvStatistics;
+            log.info("Update MKV stats, src cnt {}, sink cnt {}", mkvStatistics.getMkvSrcReadCnt(),
+                    mkvStatistics.getMkvSinkReadCnt());
+        } else {
+            log.error("No MKV Statistics available");
+        }
+        monitor.add(subject, this, MKV_STATS_PERIODICAL_CHECK_TIME, this);
+    }
+
+    public String getUploadLiveVideoSubject() {
+        return "uploadLiveVideo-" + kvsStreamName;
+    }
+
+    public String getUploadHistoricalVideoSubject() {
+        return "uploadHistoricalVideo-" + kvsStreamName;
     }
 }

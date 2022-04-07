@@ -19,6 +19,7 @@ import com.amazonaws.kinesisvideo.parser.mkv.MkvElementVisitException;
 import com.amazonaws.kinesisvideo.parser.mkv.MkvElementVisitor;
 import com.amazonaws.kinesisvideo.parser.mkv.StreamingMkvReader;
 import com.aws.iot.edgeconnectorforkvs.videouploader.TestUtil;
+import com.aws.iot.edgeconnectorforkvs.videouploader.model.MkvStatistics;
 import com.aws.iot.edgeconnectorforkvs.videouploader.visitors.MergeFragmentVisitor;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
@@ -247,5 +248,35 @@ public class MkvInputStreamTest {
         mkvInputStream = new MkvInputStream(new ByteArrayInputStream(sampleVideo));
 
         Assertions.assertFalse(mkvInputStream.markSupported());
+    }
+
+    @Test
+    public void getStats_validSampleVideo_correctSrcAndSinkCnt() {
+        // Setup test
+        MkvStatistics stats;
+        byte[] sampleVideo = TestUtil.createSampleVideo(false);
+        Assumptions.assumeTrue(sampleVideo != null);
+
+        // Do test
+        mkvInputStream = new MkvInputStream(new ByteArrayInputStream(sampleVideo));
+        stats = mkvInputStream.getStats();
+        Assertions.assertEquals(stats.getMkvSrcReadCnt(), 0);
+        Assertions.assertEquals(stats.getMkvSinkReadCnt(), 0);
+
+        mkvInputStream.available();
+        stats = mkvInputStream.getStats();
+        Assertions.assertEquals(stats.getMkvSrcReadCnt(), 126);
+        Assertions.assertEquals(stats.getMkvSinkReadCnt(), 0);
+
+        mkvInputStream.read();
+        stats = mkvInputStream.getStats();
+        Assertions.assertEquals(stats.getMkvSrcReadCnt(), 126);
+        Assertions.assertEquals(stats.getMkvSinkReadCnt(), 1);
+
+        byte[] tempBuf = new byte[10];
+        mkvInputStream.read(tempBuf, 0, 10);
+        stats = mkvInputStream.getStats();
+        Assertions.assertEquals(stats.getMkvSrcReadCnt(), 126);
+        Assertions.assertEquals(stats.getMkvSinkReadCnt(), 11);
     }
 }
