@@ -22,6 +22,7 @@ import com.aws.iot.edgeconnectorforkvs.videouploader.TestUtil;
 import com.aws.iot.edgeconnectorforkvs.videouploader.model.MkvStatistics;
 import com.aws.iot.edgeconnectorforkvs.videouploader.model.VideoFile;
 import com.aws.iot.edgeconnectorforkvs.videouploader.visitors.MergeFragmentVisitor;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
@@ -49,6 +50,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 
 @ExtendWith(MockitoExtension.class)
+@Slf4j
 public class MkvFilesInputStreamTest {
 
     private static final Long TEST_TIME = 1600000000000L;
@@ -111,7 +113,7 @@ public class MkvFilesInputStreamTest {
                 isVideoFilesAvailable = true;
             }
         } catch (Exception ex) {
-            System.out.println("Unable to create temp directory or temp video files! " + ex.getMessage());
+            log.error("Unable to create temp directory or temp video files! " + ex.getMessage());
         }
     }
 
@@ -358,7 +360,7 @@ public class MkvFilesInputStreamTest {
             byteArrayOutputStream.close();
             return byteArrayOutputStream.toByteArray();
         } catch (Exception exception) {
-            System.out.println("Unable to create sample video");
+            log.error("Unable to create sample video");
         }
         return null;
     }

@@ -21,6 +21,7 @@ import com.amazonaws.kinesisvideo.parser.mkv.StreamingMkvReader;
 import com.aws.iot.edgeconnectorforkvs.videouploader.TestUtil;
 import com.aws.iot.edgeconnectorforkvs.videouploader.model.MkvStatistics;
 import com.aws.iot.edgeconnectorforkvs.videouploader.visitors.MergeFragmentVisitor;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
@@ -37,6 +38,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 
 @ExtendWith(MockitoExtension.class)
+@Slf4j
 public class MkvInputStreamTest {
 
     private MkvInputStream mkvInputStream;
@@ -148,7 +150,7 @@ public class MkvInputStreamTest {
             answerOutputStream.close();
             expectedResult = answerOutputStream.toByteArray();
         } catch (IOException exception) {
-            System.out.println("Unable to setup test");
+            log.error("Unable to setup test");
         }
         Assumptions.assumeTrue(sampleVideo.length > 0);
         Assumptions.assumeTrue(expectedResult.length > 0);
@@ -204,7 +206,7 @@ public class MkvInputStreamTest {
             answerOutputStream.close();
             expectedResult = answerOutputStream.toByteArray();
         } catch (IOException exception) {
-            System.out.println("Unable to setup test");
+            log.error("Unable to setup test");
         }
         Assumptions.assumeTrue(sampleVideo.length > 0);
         Assumptions.assumeTrue(expectedResult.length > 0);

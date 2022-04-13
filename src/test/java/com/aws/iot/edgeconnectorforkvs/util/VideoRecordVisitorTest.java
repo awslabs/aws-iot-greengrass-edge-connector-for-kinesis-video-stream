@@ -16,6 +16,7 @@
 package com.aws.iot.edgeconnectorforkvs.util;
 
 import com.aws.iot.edgeconnectorforkvs.videouploader.model.VideoFile;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -32,6 +33,7 @@ import java.util.List;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@Slf4j
 public class VideoRecordVisitorTest {
 
     private static final Long TEST_TIME = 1600000000000L;
@@ -80,7 +82,7 @@ public class VideoRecordVisitorTest {
                 }
             });
         } catch (Exception ex) {
-            System.out.println("Unable to create temp directory or temp video files!");
+            log.error("Unable to create temp directory or temp video files!");
         }
     }
 
