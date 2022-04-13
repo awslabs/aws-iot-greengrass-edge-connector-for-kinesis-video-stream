@@ -89,6 +89,17 @@ public class GstDao {
     }
 
     /**
+     * Get element property.
+     *
+     * @param elm element
+     * @param property property
+     * @return property value
+     */
+    public Object getElementProp(@NonNull Element elm, String property) {
+        return elm.get(property);
+    }
+
+    /**
      * Add listener.
      *
      * @param elm element

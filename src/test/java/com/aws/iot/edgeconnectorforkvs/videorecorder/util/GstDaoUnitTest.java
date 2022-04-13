@@ -202,6 +202,10 @@ public class GstDaoUnitTest {
         Assertions.assertThrows(NullPointerException.class,
                 () -> mockGst.setAsStringElement(null, "property", "val"));
 
+        Assertions.assertDoesNotThrow(() -> mockGst.getElementProp(mockElm, "property"));
+        Assertions.assertThrows(NullPointerException.class,
+                () -> mockGst.getElementProp(null, "property"));
+
         Assertions.assertDoesNotThrow(
                 () -> mockGst.connectElement(mockElm, (Element.PAD_ADDED) (elm, pad) -> {
                 }));

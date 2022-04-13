@@ -110,10 +110,6 @@ public class RecorderBranchBaseUnitTest {
         public PROBE getProbeTee() {
             return this.getTeeBlockProbe();
         }
-
-        public PROBE getProbeQue() {
-            return this.getQueEosProbe();
-        }
     }
 
     @Test
@@ -211,8 +207,6 @@ public class RecorderBranchBaseUnitTest {
             }
             testBranch.getProbeTee().probeCallback(mockTeePad, mockProbeInfo);
             testBranch.getProbeTee().probeCallback(mockTeePadDup, mockProbeInfo);
-            testBranch.getProbeQue().probeCallback(mockQuePad, mockProbeInfo);
-            testBranch.getProbeQue().probeCallback(mockQuePad, mockProbeInfo);
         };
         willReturn(true).given(mockGst).unlinkPad(any(), any());
         th = new Thread(padIdle);
