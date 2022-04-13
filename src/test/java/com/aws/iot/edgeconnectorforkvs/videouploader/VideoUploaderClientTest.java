@@ -136,7 +136,7 @@ public class VideoUploaderClientTest {
                 }
             });
         } catch (IOException ex) {
-            System.out.println("Unable to create temp directory or temp video files!");
+            log.error("Unable to create temp directory or temp video files!");
         }
     }
 
@@ -166,9 +166,9 @@ public class VideoUploaderClientTest {
             field.set(instance, value);
             result = true;
         } catch (NoSuchFieldException exception) {
-            System.out.println("Failed to mock " + fieldName + ", NoSuchFieldException");
+            log.error("Failed to mock " + fieldName + ", NoSuchFieldException");
         } catch (IllegalAccessException exception) {
-            System.out.println("Failed to mock " + fieldName + ", IllegalAccessException");
+            log.error("Failed to mock " + fieldName + ", IllegalAccessException");
         }
         return result;
     }
@@ -273,7 +273,6 @@ public class VideoUploaderClientTest {
 
         // wait until task start
         if (!videoUploaderClient.isOpen()) {
-            System.out.println("task is not running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -281,7 +280,6 @@ public class VideoUploaderClientTest {
 
         // wait until task end
         if (videoUploaderClient.isOpen()) {
-            System.out.println("task is running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -305,7 +303,6 @@ public class VideoUploaderClientTest {
 
         // wait until task start
         if (!videoUploaderClient.isOpen()) {
-            System.out.println("task is not running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -313,7 +310,6 @@ public class VideoUploaderClientTest {
 
         // wait until task end
         if (videoUploaderClient.isOpen()) {
-            System.out.println("task is running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
     }
@@ -345,7 +341,6 @@ public class VideoUploaderClientTest {
 
         // wait until task start
         while (!videoUploaderClient.isOpen()) {
-            System.out.println("task is not running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -358,7 +353,6 @@ public class VideoUploaderClientTest {
 
         // wait until task end
         while (videoUploaderClient.isOpen()) {
-            System.out.println("task is running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -396,7 +390,6 @@ public class VideoUploaderClientTest {
         
         // wait until task start
         while (!videoUploaderClient.isOpen()) {
-            System.out.println("task is not running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -411,7 +404,6 @@ public class VideoUploaderClientTest {
 
         // wait until task end
         while (videoUploaderClient.isOpen()) {
-            System.out.println("task is running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -440,7 +432,6 @@ public class VideoUploaderClientTest {
 
         // wait until task start
         while (!videoUploaderClient.isOpen()) {
-            System.out.println("task is not running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -454,7 +445,6 @@ public class VideoUploaderClientTest {
 
         // wait until task end
         while (videoUploaderClient.isOpen()) {
-            System.out.println("task is running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -484,7 +474,6 @@ public class VideoUploaderClientTest {
 
         // wait until task start
         while (!videoUploaderClient.isOpen()) {
-            System.out.println("task is not running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -498,7 +487,6 @@ public class VideoUploaderClientTest {
 
         // wait until task end
         while (videoUploaderClient.isOpen()) {
-            System.out.println("task is running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -530,7 +518,6 @@ public class VideoUploaderClientTest {
         }).start();
 
         if (!videoUploaderClient.isOpen()) {
-            System.out.println("task is not running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -581,7 +568,6 @@ public class VideoUploaderClientTest {
 
         // wait until task start
         if (!videoUploaderClient.isOpen()) {
-            System.out.println("task is not running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -589,7 +575,6 @@ public class VideoUploaderClientTest {
 
         // wait until task end
         while (videoUploaderClient.isOpen()) {
-            System.out.println("task is running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -620,7 +605,6 @@ public class VideoUploaderClientTest {
 
         // wait until task start
         if (!videoUploaderClient.isOpen()) {
-            System.out.println("task is not running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -628,7 +612,6 @@ public class VideoUploaderClientTest {
 
         // wait until task end
         while (videoUploaderClient.isOpen()) {
-            System.out.println("task is running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -662,7 +645,6 @@ public class VideoUploaderClientTest {
 
         // wait until task start
         if (!videoUploaderClient.isOpen()) {
-            System.out.println("task is not running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -670,7 +652,6 @@ public class VideoUploaderClientTest {
 
         // wait until task end
         while (videoUploaderClient.isOpen()) {
-            System.out.println("task is running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -697,7 +678,6 @@ public class VideoUploaderClientTest {
 
         // wait until task start
         if (!videoUploaderClient.isOpen()) {
-            System.out.println("task is not running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -705,7 +685,6 @@ public class VideoUploaderClientTest {
 
         // wait until task end
         while (videoUploaderClient.isOpen()) {
-            System.out.println("task is running");
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 

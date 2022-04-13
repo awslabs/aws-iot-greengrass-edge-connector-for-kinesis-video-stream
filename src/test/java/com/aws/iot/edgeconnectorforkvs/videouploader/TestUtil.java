@@ -15,10 +15,13 @@
 
 package com.aws.iot.edgeconnectorforkvs.videouploader;
 
+import lombok.extern.slf4j.Slf4j;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
+@Slf4j
 public class TestUtil {
     private static final byte[] EBML_HEADER = new byte[]{
             (byte) 0x1A, (byte) 0x45, (byte) 0xDF, (byte) 0xA3, (byte) 0x94, (byte) 0x42, (byte) 0x82, (byte) 0x89,
@@ -99,7 +102,7 @@ public class TestUtil {
             byteArrayOutputStream.close();
             return byteArrayOutputStream.toByteArray();
         } catch (IOException exception) {
-            System.out.println("Unable to create sample video");
+            log.error("Unable to create sample video");
         }
         return null;
     }

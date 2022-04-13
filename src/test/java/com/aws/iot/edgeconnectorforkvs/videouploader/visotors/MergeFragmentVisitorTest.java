@@ -170,9 +170,9 @@ public class MergeFragmentVisitorTest {
             field.set(instance, value);
             result = true;
         } catch (NoSuchFieldException exception) {
-            System.out.println("Failed to mock " + fieldName + ", NoSuchFieldException");
+            log.error("Failed to mock " + fieldName + ", NoSuchFieldException");
         } catch (IllegalAccessException exception) {
-            System.out.println("Failed to mock " + fieldName + ", IllegalAccessException");
+            log.error("Failed to mock " + fieldName + ", IllegalAccessException");
         }
         return result;
     }

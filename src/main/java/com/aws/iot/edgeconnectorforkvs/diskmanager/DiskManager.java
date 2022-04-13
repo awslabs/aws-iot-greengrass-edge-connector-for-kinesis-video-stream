@@ -85,7 +85,7 @@ public class DiskManager {
                 //Walk and build the existing records queue from existing recorded files
                 diskManagerUtil.buildRecordedFilesMap(configuration);
             } catch (IOException e) {
-                System.out.println(String.format("Fail to initialize recorded file map for path %s",
+                log.error(String.format("Fail to initialize recorded file map for path %s",
                         configuration.getVideoRecordFolderPath().toString()));
                 throw new EdgeConnectorForKVSException(e);
             }
@@ -122,7 +122,6 @@ public class DiskManager {
         try (WatchService watchService = FileSystems.getDefault().newWatchService()) {
             try {
                 edgeConnectorForKVSConfigurationList.forEach(configuration -> {
-                    System.out.println("Start watching!");
                     Path path = configuration.getVideoRecordFolderPath();
                     try {
                         path.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);

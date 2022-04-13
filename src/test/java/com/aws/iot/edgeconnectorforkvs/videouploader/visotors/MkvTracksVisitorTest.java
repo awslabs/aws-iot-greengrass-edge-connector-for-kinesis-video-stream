@@ -23,6 +23,7 @@ import com.amazonaws.kinesisvideo.parser.mkv.MkvEndMasterElement;
 import com.amazonaws.kinesisvideo.parser.mkv.MkvStartMasterElement;
 import com.aws.iot.edgeconnectorforkvs.videouploader.model.exceptions.MkvTracksException;
 import com.aws.iot.edgeconnectorforkvs.videouploader.visitors.MkvTracksVisitor;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +34,7 @@ import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 
+@Slf4j
 public class MkvTracksVisitorTest {
 
     private static final byte[] TRACKS_HEADER = new byte[]{
@@ -219,9 +221,9 @@ public class MkvTracksVisitorTest {
             field.set(instance, value);
             result = true;
         } catch (NoSuchFieldException exception) {
-            System.out.println("Failed to mock " + fieldName + ", NoSuchFieldException");
+            log.error("Failed to mock " + fieldName + ", NoSuchFieldException");
         } catch (IllegalAccessException exception) {
-            System.out.println("Failed to mock " + fieldName + ", IllegalAccessException");
+            log.error("Failed to mock " + fieldName + ", IllegalAccessException");
         }
         return result;
     }
