@@ -80,9 +80,11 @@ public class RecorderBranchAppUnitTest {
         appsNewSampleListener.newSample(mockGstAppSink);
         willReturn(null).given(mockGstAppSink).pullSample();
         appsNewSampleListener.newSample(mockGstAppSink);
+        willReturn(false).given(mockGst).getElementProp(any(), eq("eos"));
         branch1.unbind();
         appsNewSampleListener.newSample(mockGstAppSink);
         branch1.bind(null, null);
+        willReturn(true).given(mockGst).getElementProp(any(), eq("eos"));
         branch1.unbind();
 
         // attach then bind

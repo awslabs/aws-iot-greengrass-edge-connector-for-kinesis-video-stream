@@ -72,8 +72,6 @@ public abstract class RecorderBranchBase {
 
     @Getter(AccessLevel.PROTECTED)
     private Pad.PROBE teeBlockProbe;
-    @Getter(AccessLevel.PROTECTED)
-    private Pad.PROBE queEosProbe;
 
     /**
      * Create and get the entry pad of audio path.
@@ -104,14 +102,24 @@ public abstract class RecorderBranchBase {
     protected abstract void relEntryVideoPad(Pad pad);
 
     /**
-     * Notification for the branch when binding, subclass can ovrrride it.
+     * Notification for the branch when starting binding, subclass can ovrrride it.
      */
-    protected void onBind() {}
+    protected void onBindBegin() {}
 
     /**
-     * Notification for the branch when unbinding, subclass can ovrrride it.
+     * Notification for the branch when finishing binding, subclass can ovrrride it.
      */
-    protected void onUnbind() {}
+    protected void onBindEnd() {}
+
+    /**
+     * Notification for the branch when starting unbinding, subclass can ovrrride it.
+     */
+    protected void onUnbindBegin() {}
+
+    /**
+     * Notification for the branch when finishing unbinding, subclass can ovrrride it.
+     */
+    protected void onUnbindEnd() {}
 
     /**
      * Constructor for RecorderBranchBase.
@@ -132,13 +140,6 @@ public abstract class RecorderBranchBase {
         this.entryPadSet = new HashSet<>();
 
         // Unbind the upper part of the path
-        this.queEosProbe = (queSrcPad, info) -> {
-            log.info("Queue reveices EOS.");
-            this.deattachCnt.countDown();
-
-            return PadProbeReturn.REMOVE;
-        };
-
         this.teeBlockProbe = (teeSrcPad, info) -> {
             Pad quePadSink = this.gstCore.getPadPeer(teeSrcPad);
 
@@ -149,16 +150,16 @@ public abstract class RecorderBranchBase {
                 log.error("Tee and queue unlink failed.");
             }
 
+            // Send EOS to queue
+            this.gstCore.sendPadEvent(quePadSink, this.gstCore.newEosEvent());
+
             // Remove tee src pad
-            Element tee = teeSrcPad2Tee.get(teeSrcPad);
-            Element queueElm = this.teeSrcInfo.get(tee).getQue();
-            Pad quePadSrc = this.getGstCore().getElementStaticPad(queueElm, "src");
+            log.info("Tee pad is releasing.");
             this.gstCore.relElementRequestPad(this.teeSrcPad2Tee.get(teeSrcPad), teeSrcPad);
+            log.info("Tee pad is removed.");
             this.teeSrcPad2Tee.remove(teeSrcPad);
 
-            // Send EOS to queue
-            this.gstCore.addPadProbe(quePadSrc, PadProbeType.IDLE, this.queEosProbe);
-            this.gstCore.sendPadEvent(quePadSink, this.gstCore.newEosEvent());
+            this.deattachCnt.countDown();
 
             return PadProbeReturn.REMOVE;
         };
@@ -255,7 +256,7 @@ public abstract class RecorderBranchBase {
             if (!this.isBranchAttached()) {
                 log.info("Branch binds to recorder.");
 
-                this.onBind();
+                this.onBindBegin();
 
                 // bind teeVideos
                 if (teeVideos != null) {
@@ -270,6 +271,8 @@ public abstract class RecorderBranchBase {
                         this.bindPath(teeAudios.get(i), RecorderCapability.AUDIO_ONLY);
                     }
                 }
+
+                this.onBindEnd();
 
                 // Set branch attached
                 this.setBranchAttached(true);
@@ -292,15 +295,19 @@ public abstract class RecorderBranchBase {
             log.error("Branch queue and branch entry unlink failed");
         }
 
+        log.info("branch queue is stopping.");
+        this.gstCore.stopElement(queElement);
+        log.info("branch queue is removed.");
+        this.gstCore.removePipelineElements(this.pipeline, queElement);
+
+        log.info("branch entry pad is releasing.");
         if (cap == RecorderCapability.AUDIO_ONLY) {
             relEntryAudioPad(entryPadSink);
         } else {
             relEntryVideoPad(entryPadSink);
         }
 
-        this.gstCore.stopElement(queElement);
-        this.gstCore.removePipelineElements(this.pipeline, queElement);
-
+        log.info("branch entry pad is removed.");
         this.entryPadSet.remove(entryPadSink);
     }
 
@@ -330,15 +337,17 @@ public abstract class RecorderBranchBase {
                 }
                 this.deattachCnt = null;
 
+                this.onUnbindBegin();
+
                 for (Map.Entry<Element, TeeMetadata> info : this.teeSrcInfo.entrySet()) {
                     this.unbindLower(info.getValue().getQue(), info.getValue().getType());
                 }
                 this.teeSrcInfo.clear();
 
+                this.onUnbindEnd();
+
                 // Set branch deattached
                 this.setBranchAttached(false);
-
-                this.onUnbind();
             } else {
                 log.warn("Branch is already unbound.");
             }

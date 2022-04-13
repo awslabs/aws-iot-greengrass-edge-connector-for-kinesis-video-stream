@@ -22,7 +22,10 @@ import com.aws.iot.edgeconnectorforkvs.videorecorder.module.branch.RecorderBranc
 import com.aws.iot.edgeconnectorforkvs.videorecorder.util.GstDao;
 import org.freedesktop.gstreamer.Element;
 import org.freedesktop.gstreamer.Pad;
+import org.freedesktop.gstreamer.PadProbeInfo;
 import org.freedesktop.gstreamer.Pipeline;
+import org.freedesktop.gstreamer.event.EOSEvent;
+import org.freedesktop.gstreamer.event.FlushStartEvent;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -72,6 +75,11 @@ public class RecorderBranchFileUnitTest {
 
     @Test
     void locationFormatSignal_invokeListener_noException() {
+        Pad mockPad = mock(Pad.class);
+        PadProbeInfo mockProbeInfo = mock(PadProbeInfo.class);
+        EOSEvent mockEosEvent = mock(EOSEvent.class);
+        FlushStartEvent mockFlushStartEvent = mock(FlushStartEvent.class);
+
         willAnswer(invocation -> {
             locCallback = invocation.getArgument(2);
             return null;
@@ -83,6 +91,13 @@ public class RecorderBranchFileUnitTest {
         branch.setProperty("max-size-time", 10000000L);
         branch.bind(null, null);
         Assertions.assertDoesNotThrow(() -> locCallback.callback(null, 0, null));
+        willReturn(mockFlushStartEvent).given(mockProbeInfo).getEvent();
+        branch.getPadEosProbe().probeCallback(mockPad, mockProbeInfo);
+        willReturn(mockEosEvent).given(mockProbeInfo).getEvent();
+        branch.getPadEosProbe().probeCallback(mockPad, mockProbeInfo);
         branch.unbind();
+
+        // Test for exception
+        branch.onUnbindBegin();
     }
 }

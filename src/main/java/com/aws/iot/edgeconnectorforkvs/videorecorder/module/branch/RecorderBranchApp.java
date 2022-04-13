@@ -17,6 +17,7 @@
 package com.aws.iot.edgeconnectorforkvs.videorecorder.module.branch;
 
 import java.nio.ByteBuffer;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.base.RecorderBranchBase;
@@ -51,6 +52,8 @@ public class RecorderBranchApp extends RecorderBranchBase {
         void onData(ByteBuffer buff);
     }
 
+    private static final long UNBIND_TIMEOUT_MS = 1000;
+    private static final long UNBIND_EOS_CHECK_MS = 5;
     private Element muxer;
     private AppSink appSink;
     private GstDao gstCore;
@@ -118,13 +121,13 @@ public class RecorderBranchApp extends RecorderBranchBase {
     }
 
     @Override
-    protected synchronized void onBind() {
+    protected synchronized void onBindBegin() {
         this.appNotifyMtx.lock();
         try {
             this.muxer = this.getMuxerFromType(this.containerType, false);
             this.appSink = (AppSink) this.gstCore.newElement("appsink");
 
-            this.gstCore.setElement(appSink, "emit-signals", true);
+            this.gstCore.setElement(this.appSink, "emit-signals", true);
 
             // Signals
             this.gstCore.connectAppSink(this.appSink, this.onNewSample);
@@ -133,8 +136,8 @@ public class RecorderBranchApp extends RecorderBranchBase {
             this.gstCore.addPipelineElements(this.pipeline, this.muxer, this.appSink);
             this.gstCore.linkManyElement(this.muxer, this.appSink);
 
-            this.gstCore.playElement(this.muxer);
             this.gstCore.playElement(this.appSink);
+            this.gstCore.playElement(this.muxer);
 
             this.setNotificationOn(true);
         } finally {
@@ -143,16 +146,43 @@ public class RecorderBranchApp extends RecorderBranchBase {
     }
 
     @Override
-    protected synchronized void onUnbind() {
+    protected synchronized void onUnbindBegin() {
+        boolean isEos = false;
+        int waitTimeInMs = 0;
+
+        log.info("AppBranch is waiting for EOS.");
+        while (!isEos && waitTimeInMs < RecorderBranchApp.UNBIND_TIMEOUT_MS) {
+            isEos = (boolean) this.gstCore.getElementProp(this.appSink, "eos");
+            try {
+                TimeUnit.MILLISECONDS.sleep(RecorderBranchApp.UNBIND_EOS_CHECK_MS);
+            } catch (InterruptedException e) {
+                log.error("AppBranch fails to wait for EOS.", e);
+                break;
+            }
+            waitTimeInMs += RecorderBranchApp.UNBIND_EOS_CHECK_MS;
+        }
+
+        if (isEos) {
+            log.info("AppBranch receives EOS.");
+        } else {
+            log.warn("AppBranch doesn't receive EOS.");
+        }
+    }
+
+    @Override
+    protected synchronized void onUnbindEnd() {
         this.appNotifyMtx.lock();
         try {
             this.setNotificationOn(false);
-            this.gstCore.sendElementEvent(this.muxer, this.gstCore.newEosEvent());
-            this.gstCore.setElement(appSink, "emit-signals", false);
+            log.info("AppBranch stops muxer");
             this.gstCore.stopElement(this.muxer);
+            log.info("AppBranch stops appsink");
             this.gstCore.stopElement(this.appSink);
+            log.info("AppBranch unlink muxer and appsink");
             this.gstCore.unlinkElements(this.muxer, this.appSink);
+            log.info("AppBranch removes pipeline");
             this.gstCore.removePipelineElements(this.pipeline, this.muxer, this.appSink);
+            log.info("AppBranch sets null");
             this.muxer = null;
             this.appSink = null;
         } finally {

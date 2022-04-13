@@ -18,8 +18,12 @@ package com.aws.iot.edgeconnectorforkvs.videorecorder.module.branch;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.base.RecorderBranchBase;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.model.ContainerType;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.util.Config;
@@ -27,9 +31,14 @@ import com.aws.iot.edgeconnectorforkvs.videorecorder.util.GstDao;
 import com.sun.jna.Pointer;
 import org.freedesktop.gstreamer.Element;
 import org.freedesktop.gstreamer.Pad;
+import org.freedesktop.gstreamer.PadProbeReturn;
+import org.freedesktop.gstreamer.PadProbeType;
 import org.freedesktop.gstreamer.Pipeline;
+import org.freedesktop.gstreamer.event.EOSEvent;
 import org.freedesktop.gstreamer.lowlevel.GPointer;
 import org.freedesktop.gstreamer.lowlevel.GstAPI.GstCallback;
+import lombok.AccessLevel;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -37,8 +46,11 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 public class RecorderBranchFile extends RecorderBranchBase {
+    private static final long UNBIND_TIMEOUT_MS = 3000;
     private Element muxer;
+    private Element fileSink;
     private Element splitMuxSink;
+    private Pad fileSinkPad;
     private GstDao gstCore;
     private Pipeline pipeline;
     private String filePath;
@@ -46,6 +58,9 @@ public class RecorderBranchFile extends RecorderBranchBase {
     private String fileExtension;
     private HashMap<String, Object> propertySet;
     private String currentFilePath;
+    @Getter(AccessLevel.PROTECTED)
+    private Pad.PROBE padEosProbe;
+    private CountDownLatch deattachCnt;
 
     /**
      * Interface for updating new file path.
@@ -122,15 +137,17 @@ public class RecorderBranchFile extends RecorderBranchBase {
     }
 
     @Override
-    protected synchronized void onBind() {
+    protected synchronized void onBindBegin() {
         ArrayList<String> invalidProp = new ArrayList<>();
 
         log.debug("FileBranch onBind");
 
         this.muxer = this.getMuxerFromType(this.containerType, true);
+        this.fileSink = this.gstCore.newElement("filesink");
         this.splitMuxSink = this.gstCore.newElement("splitmuxsink");
 
-        this.gstCore.setElement(this.splitMuxSink, "muxer", muxer);
+        this.gstCore.setElement(this.splitMuxSink, "muxer", this.muxer);
+        this.gstCore.setElement(this.splitMuxSink, "sink", this.fileSink);
         this.gstCore.setAsStringElement(this.splitMuxSink, "location",
                 this.filePath + "." + this.fileExtension);
         this.gstCore.setElement(this.splitMuxSink, "max-size-time",
@@ -159,6 +176,20 @@ public class RecorderBranchFile extends RecorderBranchBase {
                     return this.gstCore.invokeGLibStrdup(this.getCurrentFilePath());
                 });
 
+        // Add EOS probe
+        this.deattachCnt = new CountDownLatch(1);
+        this.padEosProbe = (reqPad, info) -> {
+            if (info.getEvent().getClass() == EOSEvent.class) {
+                log.info("FileBranch sink reveices EOS.");
+                this.deattachCnt.countDown();
+            }
+            return PadProbeReturn.REMOVE;
+        };
+        HashSet<PadProbeType> mask =
+                new HashSet<>(Arrays.asList(PadProbeType.BLOCK, PadProbeType.EVENT_DOWNSTREAM));
+        this.fileSinkPad = this.gstCore.getElementStaticPad(this.fileSink, "sink");
+        this.gstCore.addPadProbe(this.fileSinkPad, mask, this.padEosProbe);
+
         // add elements
         this.gstCore.addPipelineElements(this.pipeline, this.splitMuxSink);
 
@@ -166,11 +197,41 @@ public class RecorderBranchFile extends RecorderBranchBase {
     }
 
     @Override
-    protected synchronized void onUnbind() {
-        this.gstCore.sendElementEvent(this.splitMuxSink, this.gstCore.newEosEvent());
+    protected synchronized void onUnbindBegin() {
+        log.info("FileBranch is waiting for EOS.");
+        boolean isEos = false;
+
+        try {
+            isEos = this.deattachCnt.await(RecorderBranchFile.UNBIND_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            log.error("deattachCnt InterruptedException: {}", e.getMessage());
+        }
+
+        if (isEos) {
+            log.info("FileBranch received EOS.");
+        } else {
+            log.warn("FileBranch does not receive EOS");
+            this.gstCore.removePadProbe(this.fileSinkPad, this.padEosProbe);
+            this.gstCore.sendElementEvent(this.splitMuxSink, this.gstCore.newEosEvent());
+            try {
+                TimeUnit.MILLISECONDS.sleep(RecorderBranchFile.UNBIND_TIMEOUT_MS);
+            } catch (InterruptedException e) {
+                log.error("FileBranch waits for new EOS error: {}.", e);
+            }
+        }
+        this.deattachCnt = null;
+    }
+
+    @Override
+    protected synchronized void onUnbindEnd() {
+        log.info("FileBranch stops splitmuxsink");
         this.gstCore.stopElement(this.splitMuxSink);
+        log.info("FileBranch removes splitmuxsink");
         this.gstCore.removePipelineElements(this.pipeline, this.splitMuxSink);
+        log.info("FileBranch sets null");
+        this.fileSinkPad = null;
         this.splitMuxSink = null;
+        this.fileSink = null;
         this.muxer = null;
         this.currentFilePath = null;
     }

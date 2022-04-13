@@ -318,6 +318,7 @@ public class VideoRecorderUnitTest {
         willReturn(mockGstBuffer).given(mockGstSample).getBuffer();
         willReturn(byteBuffer).given(mockGstBuffer).map(any(Boolean.class));
         willReturn(mockGstPad).given(mockGst).getElementRequestPad(any(Element.class), anyString());
+        willReturn(true).given(mockGst).getElementProp(any(), eq("eos"));
 
         builder.registerCustomCamera(mockCamera);
         // register app callback
@@ -349,7 +350,6 @@ public class VideoRecorderUnitTest {
                 Assertions.fail();
             }
         }
-        branchIdleProbe.probeCallback(mockGstPad, mockProbeInfo);
         branchIdleProbe.probeCallback(mockGstPad, mockProbeInfo);
 
         try {
@@ -442,6 +442,7 @@ public class VideoRecorderUnitTest {
         willReturn(mockGstBuffer).given(mockGstSample).getBuffer();
         willReturn(byteBuffer).given(mockGstBuffer).map(any(Boolean.class));
         willReturn(mockGstPad).given(mockGst).getElementRequestPad(any(Element.class), anyString());
+        willReturn(true).given(mockGst).getElementProp(any(), eq("eos"));
 
         // register app OutputStream
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -472,7 +473,6 @@ public class VideoRecorderUnitTest {
                 Assertions.fail();
             }
         }
-        branchIdleProbe.probeCallback(mockGstPad, mockProbeInfo);
         branchIdleProbe.probeCallback(mockGstPad, mockProbeInfo);
 
         try {
@@ -517,6 +517,7 @@ public class VideoRecorderUnitTest {
         willReturn(mockGstBuffer).given(mockGstSample).getBuffer();
         willReturn(byteBuffer).given(mockGstBuffer).map(any(Boolean.class));
         willReturn(mockGstPad).given(mockGst).getElementRequestPad(any(Element.class), anyString());
+        willReturn(true).given(mockGst).getElementProp(any(), eq("eos"));
 
         // register app OutputStream
         PipedOutputStream pipedOutputStream = new PipedOutputStream();
@@ -553,7 +554,6 @@ public class VideoRecorderUnitTest {
             }
         }
         branchIdleProbe.probeCallback(mockGstPad, mockProbeInfo);
-        branchIdleProbe.probeCallback(mockGstPad, mockProbeInfo);
 
         try {
             recordThread.join();
@@ -582,19 +582,22 @@ public class VideoRecorderUnitTest {
                 recorder.new RecorderBranchFileMonitor(ContainerType.MATROSKA, this.mockGst,
                         this.mockGstPipeline, "./recorder", "monitorFile");
 
-        branchFile.onBind();
+        branchFile.onBindBegin();
+        branchFile.onBindEnd();
         locCallback.callback(null, 0, null);
         branchFile.getMonitorCheck().check(mockMonitor, "monitorFile", null);
         branchFile.getMonitorCheck().check(mockMonitor, "monitorFile", null);
-        branchFile.onUnbind();
+        branchFile.onUnbindBegin();
 
         RecorderBranchAppMonitor branchApp = recorder.new RecorderBranchAppMonitor(
                 ContainerType.MATROSKA, this.mockGst, this.mockGstPipeline, "monitorApp");
 
-        branchApp.onBind();
+        branchApp.onBindBegin();
+        branchApp.onBindEnd();
         branchApp.getMonitorCheck().check(mockMonitor, "monitorApp", null);
         branchApp.increaseAppCallbackDataCnt();
         branchApp.getMonitorCheck().check(mockMonitor, "monitorApp", null);
-        branchApp.onUnbind();
+        willReturn(true).given(mockGst).getElementProp(any(), eq("eos"));
+        branchApp.onUnbindBegin();
     }
 }

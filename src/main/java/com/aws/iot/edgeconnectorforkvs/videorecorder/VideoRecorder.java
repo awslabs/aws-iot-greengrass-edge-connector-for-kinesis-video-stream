@@ -66,18 +66,23 @@ public class VideoRecorder extends VideoRecorderBase {
         }
 
         @Override
-        protected void onBind() {
+        protected void onBindBegin() {
             this.appCallbackDataCntNew.set(0);
             this.appCallbackDataCntOld.set(0);
-            super.onBind();
+            super.onBindBegin();
+        }
+
+        @Override
+        protected void onBindEnd() {
+            super.onBindEnd();
             Monitor.getMonitor().add(this.monitorSubject, this.monitorCheck,
                     RecorderBranchAppMonitor.MONITOR_PERIOD, null);
         }
 
         @Override
-        protected void onUnbind() {
+        protected void onUnbindBegin() {
             Monitor.getMonitor().remove(this.monitorSubject);
-            super.onUnbind();
+            super.onUnbindBegin();
         }
 
         public void increaseAppCallbackDataCnt() {
@@ -118,18 +123,23 @@ public class VideoRecorder extends VideoRecorderBase {
         }
 
         @Override
-        protected void onBind() {
+        protected void onBindBegin() {
             this.filePathOld = "";
             this.filePathNew = "";
-            super.onBind();
+            super.onBindBegin();
+        }
+
+        @Override
+        protected void onBindEnd() {
+            super.onBindEnd();
             Monitor.getMonitor().add(this.monitorSubject, this.monitorCheck,
                     RecorderBranchFileMonitor.MONITOR_PERIOD, null);
         }
 
         @Override
-        protected void onUnbind() {
+        protected void onUnbindBegin() {
             Monitor.getMonitor().remove(this.monitorSubject);
-            super.onUnbind();
+            super.onUnbindBegin();
         }
 
         CheckCallback getMonitorCheck() {
