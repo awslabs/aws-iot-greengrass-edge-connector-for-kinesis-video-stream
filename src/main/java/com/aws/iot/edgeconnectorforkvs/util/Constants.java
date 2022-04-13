@@ -31,7 +31,7 @@ public final class Constants {
     // Temporarily set this to 1 until the issue with overwriting values on same timestamp is figured out
     public static final long STREAM_MANAGER_SITEWISE_BATCH_SIZE = 1L;
     public static final long SITEWISE_TIMESTAMP_SWITCH_TIME_IN_MILLISECONDS = 6 * 60 * 1000; // 6 hours
-    public static final long INIT_LOCK_TIMEOUT_IN_SECONDS = 10L; // 10 seconds
+    public static final long INIT_LOCK_TIMEOUT_IN_SECONDS = 60L; // 60 seconds
 
     public static final String JOB_DURATION_IN_MINS_KEY = "JobDurationInMins";
     public static final String JOB_TYPE_KEY = "JobType";
