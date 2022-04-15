@@ -39,6 +39,7 @@ import com.aws.iot.edgeconnectorforkvs.dataaccessor.StreamManager;
 import com.aws.iot.edgeconnectorforkvs.model.EdgeConnectorForKVSConfiguration;
 import com.aws.iot.edgeconnectorforkvs.videouploader.callback.UploadCallBack;
 import com.aws.iot.edgeconnectorforkvs.videouploader.mkv.MkvInputStream;
+import com.aws.iot.edgeconnectorforkvs.videouploader.model.UploaderStatus;
 import com.aws.iot.edgeconnectorforkvs.videouploader.model.exceptions.KvsStreamingException;
 import com.aws.iot.edgeconnectorforkvs.videouploader.model.exceptions.VideoUploaderException;
 import lombok.extern.slf4j.Slf4j;
@@ -272,14 +273,14 @@ public class VideoUploaderClientTest {
         }).start();
 
         // wait until task start
-        if (!videoUploaderClient.isOpen()) {
+        if (videoUploaderClient.getStatus() == UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
         videoUploaderClient.close();
 
         // wait until task end
-        if (videoUploaderClient.isOpen()) {
+        if (videoUploaderClient.getStatus() != UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -302,14 +303,14 @@ public class VideoUploaderClientTest {
         }).start();
 
         // wait until task start
-        if (!videoUploaderClient.isOpen()) {
+        if (videoUploaderClient.getStatus() == UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
         videoUploaderClient.close();
 
         // wait until task end
-        if (videoUploaderClient.isOpen()) {
+        if (videoUploaderClient.getStatus() != UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
     }
@@ -340,7 +341,7 @@ public class VideoUploaderClientTest {
         }).start();
 
         // wait until task start
-        while (!videoUploaderClient.isOpen()) {
+        while (videoUploaderClient.getStatus() == UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -352,7 +353,7 @@ public class VideoUploaderClientTest {
         putMediaAckResponseArgumentCaptor.getValue().onFailure(new RuntimeException("Mock failure"));
 
         // wait until task end
-        while (videoUploaderClient.isOpen()) {
+        while (videoUploaderClient.getStatus() != UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -389,7 +390,7 @@ public class VideoUploaderClientTest {
         Thread.sleep(STATUS_CHANGED_TIME);
         
         // wait until task start
-        while (!videoUploaderClient.isOpen()) {
+        while (videoUploaderClient.getStatus() == UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -403,7 +404,7 @@ public class VideoUploaderClientTest {
         putMediaAckResponseArgumentCaptor.getValue().onComplete();
 
         // wait until task end
-        while (videoUploaderClient.isOpen()) {
+        while (videoUploaderClient.getStatus() != UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -431,7 +432,7 @@ public class VideoUploaderClientTest {
         }).start();
 
         // wait until task start
-        while (!videoUploaderClient.isOpen()) {
+        while (videoUploaderClient.getStatus() == UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -444,11 +445,11 @@ public class VideoUploaderClientTest {
         putMediaAckResponseArgumentCaptor.getValue().onComplete();
 
         // wait until task end
-        while (videoUploaderClient.isOpen()) {
+        while (videoUploaderClient.getStatus() != UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
-        Assertions.assertFalse(videoUploaderClient.isOpen());
+        Assertions.assertFalse(videoUploaderClient.getStatus() != UploaderStatus.STOPPED);
     }
 
     @Test
@@ -473,7 +474,7 @@ public class VideoUploaderClientTest {
         }).start();
 
         // wait until task start
-        while (!videoUploaderClient.isOpen()) {
+        while (videoUploaderClient.getStatus() == UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -486,11 +487,11 @@ public class VideoUploaderClientTest {
         putMediaAckResponseArgumentCaptor.getValue().onComplete();
 
         // wait until task end
-        while (videoUploaderClient.isOpen()) {
+        while (videoUploaderClient.getStatus() != UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
-        Assertions.assertFalse(videoUploaderClient.isOpen());
+        Assertions.assertFalse(videoUploaderClient.getStatus() != UploaderStatus.STOPPED);
     }
 
     @Test
@@ -517,7 +518,7 @@ public class VideoUploaderClientTest {
             videoUploaderClient.uploadStream(inputStream, Date.from(Instant.now()), null, null);
         }).start();
 
-        if (!videoUploaderClient.isOpen()) {
+        if (videoUploaderClient.getStatus() == UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -567,14 +568,14 @@ public class VideoUploaderClientTest {
         }).start();
 
         // wait until task start
-        if (!videoUploaderClient.isOpen()) {
+        if (videoUploaderClient.getStatus() == UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
         videoUploaderClient.close();
 
         // wait until task end
-        while (videoUploaderClient.isOpen()) {
+        while (videoUploaderClient.getStatus() != UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -604,14 +605,14 @@ public class VideoUploaderClientTest {
         }).start();
 
         // wait until task start
-        if (!videoUploaderClient.isOpen()) {
+        if (videoUploaderClient.getStatus() == UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
         videoUploaderClient.close();
 
         // wait until task end
-        while (videoUploaderClient.isOpen()) {
+        while (videoUploaderClient.getStatus() != UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -644,14 +645,14 @@ public class VideoUploaderClientTest {
         }).start();
 
         // wait until task start
-        if (!videoUploaderClient.isOpen()) {
+        if (videoUploaderClient.getStatus() == UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
         videoUploaderClient.close();
 
         // wait until task end
-        while (videoUploaderClient.isOpen()) {
+        while (videoUploaderClient.getStatus() != UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
@@ -677,18 +678,18 @@ public class VideoUploaderClientTest {
         }).start();
 
         // wait until task start
-        if (!videoUploaderClient.isOpen()) {
+        if (videoUploaderClient.getStatus() == UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
         videoUploaderClient.close();
 
         // wait until task end
-        while (videoUploaderClient.isOpen()) {
+        while (videoUploaderClient.getStatus() != UploaderStatus.STOPPED) {
             Thread.sleep(STATUS_CHANGED_TIME);
         }
 
-        Assertions.assertFalse(videoUploaderClient.isOpen());
+        Assertions.assertFalse(videoUploaderClient.getStatus() != UploaderStatus.STOPPED);
     }
 
     @Test

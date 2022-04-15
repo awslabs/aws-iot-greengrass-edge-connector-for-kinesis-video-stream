@@ -38,6 +38,7 @@ import com.aws.iot.edgeconnectorforkvs.videouploader.mkv.MkvFilesInputStream;
 import com.aws.iot.edgeconnectorforkvs.videouploader.mkv.MkvInputStream;
 import com.aws.iot.edgeconnectorforkvs.videouploader.mkv.MkvStats;
 import com.aws.iot.edgeconnectorforkvs.videouploader.model.MkvStatistics;
+import com.aws.iot.edgeconnectorforkvs.videouploader.model.UploaderStatus;
 import com.aws.iot.edgeconnectorforkvs.videouploader.model.VideoFile;
 import com.aws.iot.edgeconnectorforkvs.videouploader.model.exceptions.KvsStreamingException;
 import com.aws.iot.edgeconnectorforkvs.videouploader.model.exceptions.VideoUploaderException;
@@ -61,6 +62,8 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 public class VideoUploaderClient implements VideoUploader, CheckCallback {
+
+    private UploaderStatus uploaderStatus = UploaderStatus.STOPPED;
 
     /* Default connection timeout of put media data endpoint. */
     private static final int CONNECTION_TIMEOUT_IN_MILLIS = 10_000;
@@ -89,12 +92,6 @@ public class VideoUploaderClient implements VideoUploader, CheckCallback {
     private AmazonKinesisVideoPutMedia kvsDataClient;
 
     private final Object taskStatusLock = new Object();
-
-    /* Indicate if we are doing an uploading task. */
-    private boolean isTaskOnGoing;
-
-    /* Indicate we are about to terminating a task. */
-    private boolean isTaskTerminating;
 
     /* A latch to wait or terminate a put media action. */
     private CountDownLatch putMediaLatch;
@@ -132,8 +129,16 @@ public class VideoUploaderClient implements VideoUploader, CheckCallback {
                 .withCredentials(awsCredentialsProvider)
                 .withRegion(region.getName())
                 .build();
-        vuc.isTaskOnGoing = false;
+        vuc.uploaderStatus = UploaderStatus.STOPPED;
         return vuc;
+    }
+
+    public UploaderStatus getStatus() {
+        UploaderStatus currentStatus;
+        synchronized (taskStatusLock) {
+            currentStatus = uploaderStatus;
+        }
+        return currentStatus;
     }
 
     /**
@@ -181,7 +186,7 @@ public class VideoUploaderClient implements VideoUploader, CheckCallback {
 
         ListIterator<VideoFile> filesToUpload = videoFiles.listIterator();
 
-        while (filesToUpload.hasNext() && !isTaskTerminating) {
+        while (filesToUpload.hasNext() && getStatus() != UploaderStatus.TERMINATING) {
             final Date videoStartTime = filesToUpload.next().getVideoDate();
             if (dataEndpoint == null) {
                 uploadCallBack.setDateBegin(videoStartTime);
@@ -194,7 +199,7 @@ public class VideoUploaderClient implements VideoUploader, CheckCallback {
             doUploadStream(mkvFilesInputStream, videoStartTime, statusChangedCallBack, uploadCallBack);
         }
 
-        if (isTaskTerminating) {
+        if (getStatus() == UploaderStatus.TERMINATING) {
             log.info("Quit uploading historical video because task is terminating");
         }
 
@@ -263,7 +268,7 @@ public class VideoUploaderClient implements VideoUploader, CheckCallback {
             log.debug("Put media is interrupted");
         }
 
-        if (lastKvsStreamingException == null && isTaskTerminating) {
+        if (lastKvsStreamingException == null && getStatus() != UploaderStatus.TERMINATING) {
             /* It's ending from close request, let's wait a little to receive ACKs. */
             try {
                 inputStream.close();
@@ -288,8 +293,8 @@ public class VideoUploaderClient implements VideoUploader, CheckCallback {
     @Override
     public void close() {
         synchronized (taskStatusLock) {
-            if (isTaskOnGoing) {
-                isTaskTerminating = true;
+            if (uploaderStatus != UploaderStatus.STOPPED) {
+                uploaderStatus = UploaderStatus.TERMINATING;
                 if (putMediaLatch != null) {
                     putMediaLatch.countDown();
                 }
@@ -297,24 +302,12 @@ public class VideoUploaderClient implements VideoUploader, CheckCallback {
         }
     }
 
-    /**
-     * Check if there is an on-going task.
-     *
-     * @return True if there is on-going task, or false otherwise
-     */
-    public boolean isOpen() {
-        synchronized (taskStatusLock) {
-            return isTaskOnGoing;
-        }
-    }
-
     private void taskStart() throws VideoUploaderException {
         synchronized (taskStatusLock) {
-            if (isTaskOnGoing) {
+            if (uploaderStatus != UploaderStatus.STOPPED) {
                 throw new VideoUploaderException("There is an on going task");
             } else {
-                isTaskOnGoing = true;
-                isTaskTerminating = false;
+                uploaderStatus = UploaderStatus.STARTED;
                 lastKvsStreamingException = null;
             }
         }
@@ -322,11 +315,11 @@ public class VideoUploaderClient implements VideoUploader, CheckCallback {
 
     private void taskEnd() {
         synchronized (taskStatusLock) {
-            isTaskOnGoing = false;
-            if (isTaskTerminating) {
+            if (uploaderStatus == UploaderStatus.TERMINATING) {
                 /* Task is terminated by request. Ignore exceptions. */
                 lastKvsStreamingException = null;
             }
+            uploaderStatus = UploaderStatus.STOPPED;
             if (lastKvsStreamingException != null) {
                 throw lastKvsStreamingException;
             }
