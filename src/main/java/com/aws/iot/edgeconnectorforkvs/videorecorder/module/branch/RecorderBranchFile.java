@@ -179,11 +179,13 @@ public class RecorderBranchFile extends RecorderBranchBase {
         // Add EOS probe
         this.deattachCnt = new CountDownLatch(1);
         this.padEosProbe = (reqPad, info) -> {
+            PadProbeReturn ret = PadProbeReturn.PASS;
             if (info.getEvent().getClass() == EOSEvent.class) {
                 log.info("FileBranch sink reveices EOS.");
+                ret = PadProbeReturn.REMOVE;
                 this.deattachCnt.countDown();
             }
-            return PadProbeReturn.REMOVE;
+            return ret;
         };
         HashSet<PadProbeType> mask =
                 new HashSet<>(Arrays.asList(PadProbeType.BLOCK, PadProbeType.EVENT_DOWNSTREAM));
