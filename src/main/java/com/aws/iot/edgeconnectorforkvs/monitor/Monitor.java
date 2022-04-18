@@ -128,7 +128,7 @@ public final class Monitor {
      *
      * @param subject unique task name
      * @param callback modules define their callback for the checking task
-     * @param expireMillisec timeout in milliiseconds
+     * @param expireMillisec timeout in milliseconds
      * @param userData user data
      * @return true if tasks are added
      */

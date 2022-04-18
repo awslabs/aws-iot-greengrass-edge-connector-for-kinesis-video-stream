@@ -19,15 +19,16 @@ package com.aws.iot.edgeconnectorforkvs.controller;
 import static com.aws.iot.edgeconnectorforkvs.util.Constants.INIT_LOCK_TIMEOUT_IN_SECONDS;
 import static com.aws.iot.edgeconnectorforkvs.util.Constants.PATH_DELIMITER;
 import static com.aws.iot.edgeconnectorforkvs.util.Constants.RECORDER_RESTART_TIME_GAP_MILLI_SECONDS;
+import static com.aws.iot.edgeconnectorforkvs.util.Constants.RECORDER_STATS_PERIODICAL_CHECK_TIME;
 import static com.aws.iot.edgeconnectorforkvs.util.Constants.VIDEO_FILENAME_PREFIX_WITH_OUT_UNDERLINE;
-import static com.aws.iot.edgeconnectorforkvs.util.Constants.WAIT_TIME_BEFORE_RESTART_IN_MILLISECS;
 
 import com.aws.iot.edgeconnectorforkvs.model.EdgeConnectorForKVSConfiguration;
+import com.aws.iot.edgeconnectorforkvs.monitor.Monitor;
 import com.aws.iot.edgeconnectorforkvs.util.Constants;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.VideoRecorder;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.VideoRecorderBuilder;
-import com.aws.iot.edgeconnectorforkvs.videorecorder.base.VideoRecorderBase;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.callback.GStreamerAppDataCallback;
+import com.aws.iot.edgeconnectorforkvs.videorecorder.callback.RecorderStatusCheckCallbackImpl;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.callback.StatusCallback;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.callback.StatusCallbackImpl;
 import com.aws.iot.edgeconnectorforkvs.videorecorder.model.CameraType;
@@ -62,8 +63,7 @@ public class RecordingController {
                             edgeConnectorForKVSConfiguration.getRecordingRequestsCount());
                     return;
                 }
-                VideoRecorderBuilder builder = getVideoRecorderBuilder(edgeConnectorForKVSConfiguration,
-                        recorderService);
+                VideoRecorderBuilder builder = getVideoRecorderBuilder();
                 PipedOutputStream outputStream = new PipedOutputStream();
                 builder.addCameraSource(CameraType.RTSP, edgeConnectorForKVSConfiguration.getRtspStreamURL());
                 builder.registerFileSink(ContainerType.MATROSKA,
@@ -91,17 +91,21 @@ public class RecordingController {
         if (videoRecorder != null) {
             log.info("Start recording for " + edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
             videoRecorder.start();
+            edgeConnectorForKVSConfiguration.setExpectedRecorderStatus(RecorderStatus.STARTED);
+            RecorderStatusCheckCallbackImpl recorderStatusCheckCallback =
+                    new RecorderStatusCheckCallbackImpl(recorderService);
+            Monitor.getMonitor().add(getRecorderSubject(edgeConnectorForKVSConfiguration),
+                    recorderStatusCheckCallback,
+                    RECORDER_STATS_PERIODICAL_CHECK_TIME,
+                    edgeConnectorForKVSConfiguration);
         } else {
             log.error("Fail to init recorder for " + edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
             edgeConnectorForKVSConfiguration.getFatalStatus().set(true);
         }
     }
 
-    public static VideoRecorderBuilder getVideoRecorderBuilder(
-            EdgeConnectorForKVSConfiguration edgeConnectorForKVSConfiguration,
-            ExecutorService recorderService) {
-        StatusCallback statusCallback = new StatusCallbackImpl(edgeConnectorForKVSConfiguration,
-                recorderService);
+    public static VideoRecorderBuilder getVideoRecorderBuilder() {
+        StatusCallback statusCallback = new StatusCallbackImpl();
         return new VideoRecorderBuilder(statusCallback);
     }
 
@@ -139,6 +143,7 @@ public class RecordingController {
                 if (videoRecorder.getPipeline() != null) {
                     edgeConnectorForKVSConfiguration.getVideoRecorder().getPipeline().close();
                 }
+                edgeConnectorForKVSConfiguration.setExpectedRecorderStatus(RecorderStatus.STOPPED);
             } else {
                 log.error("Fail to stop recorder for " + edgeConnectorForKVSConfiguration.getKinesisVideoStreamName());
                 edgeConnectorForKVSConfiguration.getFatalStatus().set(true);
@@ -157,4 +162,10 @@ public class RecordingController {
             stopRecordingJob(restartNeededConfiguration);
         }
     }
+
+    private static String getRecorderSubject(@NonNull EdgeConnectorForKVSConfiguration edgeConnectorForKVSConfiguration) {
+        return "Recorder-" + String.valueOf(edgeConnectorForKVSConfiguration.getVideoRecorder().hashCode()).substring(0, 8)
+                + "-Thread-For-" + edgeConnectorForKVSConfiguration.getKinesisVideoStreamName();
+    }
+
 }
