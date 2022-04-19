@@ -53,6 +53,7 @@ import java.net.URI;
 import java.util.Date;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -103,6 +104,8 @@ public class VideoUploaderClient implements VideoUploader, CheckCallback {
 
     /* MKV statistics comes from either MkvInputStream or MkvFilesInputStream. */
     private MkvStatistics mkvStatistics = MkvStatistics.builder().build();
+
+    private final String subjectUuid = UUID.randomUUID().toString();
 
     /**
      * The factory creator of VideoUploaderClient.
@@ -415,10 +418,10 @@ public class VideoUploaderClient implements VideoUploader, CheckCallback {
     }
 
     public String getUploadLiveVideoSubject() {
-        return "uploadLiveVideo-" + kvsStreamName;
+        return "uploadLiveVideo-" + kvsStreamName + "-" + subjectUuid;
     }
 
     public String getUploadHistoricalVideoSubject() {
-        return "uploadHistoricalVideo-" + kvsStreamName;
+        return "uploadHistoricalVideo-" + kvsStreamName + "-" + subjectUuid;
     }
 }
