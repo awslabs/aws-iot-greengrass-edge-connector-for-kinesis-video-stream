@@ -28,6 +28,7 @@ public final class Constants {
     public static final long STREAM_MANAGER_STREAM_SEGMENT_SIZE = 16777216L;  // 16MB
     public static final int MILLI_SECOND_TO_SECOND = 1000;
     public static final int RECORDER_RESTART_TIME_GAP_MILLI_SECONDS = 60 * 1000; // 1 minutes
+    public static final int RECORDER_RESTART_STATUS_CHECK_TIME_GAP_MILLI_SECONDS = 10 * 1000; // 10 seconds
     public static final int UPLOADER_WAIT_FOR_ACKS_DELAY_MILLI_SECONDS = 3 * 1000; // 3 seconds
     public static final int DEFAULT_CREATED_KVS_DATA_RETENTION_TIME_IN_HOURS = 7 * 24; // 7 dates
     // Temporarily set this to 1 until the issue with overwriting values on same timestamp is figured out

@@ -1,6 +1,6 @@
 package com.aws.iot.edgeconnectorforkvs.videorecorder.callback;
 
-import static com.aws.iot.edgeconnectorforkvs.util.Constants.RECORDER_RESTART_TIME_GAP_MILLI_SECONDS;
+import static com.aws.iot.edgeconnectorforkvs.util.Constants.RECORDER_RESTART_STATUS_CHECK_TIME_GAP_MILLI_SECONDS;
 import static com.aws.iot.edgeconnectorforkvs.util.Constants.RECORDER_STATS_PERIODICAL_CHECK_TIME;
 
 import com.aws.iot.edgeconnectorforkvs.model.EdgeConnectorForKVSConfiguration;
@@ -20,7 +20,7 @@ import java.util.concurrent.ExecutorService;
 @AllArgsConstructor
 public class RecorderStatusCheckCallbackImpl implements CheckCallback {
     @Setter
-    private static int RESTART_SLEEP_TIME = RECORDER_RESTART_TIME_GAP_MILLI_SECONDS;
+    private static int RESTART_SLEEP_TIME = RECORDER_RESTART_STATUS_CHECK_TIME_GAP_MILLI_SECONDS;
     private ExecutorService recorderService;
 
     @Override
@@ -46,11 +46,17 @@ public class RecorderStatusCheckCallbackImpl implements CheckCallback {
 
     private void restartRecorder(@NonNull VideoRecorderBase recorder) {
         recorder.stop();
-        try {
-            Thread.sleep(RESTART_SLEEP_TIME);
-        } catch (InterruptedException e) {
-            log.error("Thread sleep interrupted.");
-        }
+        int restartCount = 0;
+        //Check Recorder status periodically for 1 minutes
+        do {
+            try {
+                Thread.sleep(RESTART_SLEEP_TIME);
+                restartCount++;
+            } catch (InterruptedException e) {
+                log.error("Thread sleep interrupted.");
+            }
+        } while ((recorder.getStatus() != RecorderStatus.STOPPED && recorder.getStatus() != RecorderStatus.FAILED)
+                && restartCount < 6);
         log.info("Restart Recording for pipeline recorder " + recorder.recorderName);
         recorder.start();
     }
