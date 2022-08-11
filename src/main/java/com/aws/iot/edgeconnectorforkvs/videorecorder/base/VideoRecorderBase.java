@@ -1,17 +1,15 @@
 /*
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License").
- * You may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
  */
 
 package com.aws.iot.edgeconnectorforkvs.videorecorder.base;
@@ -90,6 +88,7 @@ public class VideoRecorderBase {
     private Bus.EOS busEosListener;
 
     private AtomicBoolean isCamCapSetAlready;
+    private AtomicBoolean isCamCapNotified;
 
     private void addBusCall(Bus bus, boolean toAdd) {
         if (toAdd) {
@@ -125,6 +124,7 @@ public class VideoRecorderBase {
         this.cameraAudioCnt = new AtomicInteger(0);
         this.branchPool = new HashMap<>();
         this.isCamCapSetAlready = new AtomicBoolean(false);
+        this.isCamCapNotified = new AtomicBoolean(false);
 
         this.busWarnListener = (gstObject, i, s) -> log.warn("{} receives GST bus WARN: {} {} {}.",
                 this.recorderName, i, s, gstObject);
@@ -191,6 +191,7 @@ public class VideoRecorderBase {
             this.unbindCamera(RecorderCapability.VIDEO_ONLY);
             if (cameraSource != null) {
                 cameraSource.onUnbind();
+                this.isCamCapNotified.set(false);
             }
 
             this.gstCore.stopElement(this.pipeline);
@@ -305,7 +306,14 @@ public class VideoRecorderBase {
 
         // Camera capability listener
         this.cameraCapListener = (audioCnt, videoCnt) -> {
-            this.bindAutoBranches(audioCnt, videoCnt);
+            if (this.isCamCapNotified.compareAndSet(false, true)) {
+                log.info("{} camera capability is notified: audio {} video {}.", this.recorderName,
+                        audioCnt, videoCnt);
+                this.bindAutoBranches(audioCnt, videoCnt);
+            } else {
+                log.warn("{} camera capability is notified but already notified.",
+                        this.recorderName);
+            }
         };
 
         // Camera pad added listener

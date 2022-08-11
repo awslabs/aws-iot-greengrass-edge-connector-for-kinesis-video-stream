@@ -315,6 +315,8 @@ public class RecorderBaseUnitTest {
         recorder1.addCameraSource(mockCamera);
         recorder1.addBranch(mockBranch, "MockBranch1", true);
         Assertions.assertDoesNotThrow(() -> capListener.onNotify(1, 1));
+        // should be ignored if camera capability is already notified
+        Assertions.assertDoesNotThrow(() -> capListener.onNotify(1, 1));
 
         // bind video pads
         willReturn(RecorderCapability.VIDEO_ONLY).given(mockBranch).getCapability();
