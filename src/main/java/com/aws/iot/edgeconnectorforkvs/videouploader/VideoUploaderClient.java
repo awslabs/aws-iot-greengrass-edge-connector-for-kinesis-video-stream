@@ -286,6 +286,8 @@ public class VideoUploaderClient implements VideoUploader, CheckCallback {
             }
         }
 
+        log.info("Last MKV stats, src cnt {}, sink cnt {}", mkvStatistics.getMkvSrcReadCnt(),
+                mkvStatistics.getMkvSinkReadCnt());
         kvsDataClient.close();
         kvsDataClient = null;
     }
